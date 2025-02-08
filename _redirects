@@ -1,0 +1,4 @@
+# Redirect requests for /shorten to /.netlify/functions/shorten
+/shorten /.netlify/functions/shorten 200
+/:shortCode /.netlify/functions/redirect/:shortCode 200
+/info/:shortCode /.netlify/functions/info/:shortCode 200
