@@ -31,9 +31,9 @@
 
 This project is automatically deployed to Netlify. You can find the live functions here:
 
-* **Shorten:** `https://your-site-name.netlify.app/.netlify/functions/shorten`
-* **Redirect:** `https://your-site-name.netlify.app/.netlify/functions/redirect`
-* **Info:** `https://your-site-name.netlify.app/.netlify/functions/info`
+* **Shorten:** `https://arrasta.click/shorten`
+* **Redirect:** `https://arrasta.click/:shortCode`
+* **Info:** `https://arrasta.click/info/:shortCode`
 
 ## 📖 API Documentation
 
@@ -50,14 +50,3 @@ We welcome contributions with open arms! 🤗 For major changes, please open an 
 ## 📜 License
 
 [MIT](https://choosealicense.com/licenses/mit/)
-
----
-
-<details>
-  <summary>🌙 Dark Mode</summary>
-
-```css
-body {
-  background-color: #222;
-  color: #eee;
-}
