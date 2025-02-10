@@ -7,18 +7,3 @@ services:
       - "8888:8888"
     volumes:
       - .:/app
-    environment:
-      - MONGODB_URI=mongodb://mongo:27017/arrasta_db
-      - BASE_URL=http://localhost:8888
-    depends_on:
-      - mongo
-
-  mongo:
-    image: mongo:latest
-    ports:
-      - "27017:27017"
-    volumes:
-      - mongo_data:/data/db
-
-volumes:
-  mongo_data:

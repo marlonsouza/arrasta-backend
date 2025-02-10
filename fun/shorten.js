@@ -1,37 +1,53 @@
 const express = require('express');
 const qrcode = require('qrcode');
 const serverless = require('serverless-http');
-const connectToDatabase = require('../db/mongodb'); // Import the DB connection
+const connectToDatabase = require('../db/faunadb'); // Import the FaunaDB connection
+
+const Url = require('../model/url');
+const { fql } = require('fauna');
 
 const app = express();
 app.use(express.json());
 
+const urlResponse = fql`
+  url {
+    originalUrl,
+    customAlias,
+    expiryDate,
+    createdAt,
+    accessNumber
+  }
+`;
+
 // Wrap your async function handler
 app.post('/shorten', async (req, res) => {
-
   try {
-    const { client, collection } = await connectToDatabase();
+    const client = await connectToDatabase();
     const { originalUrl, customAlias, expiryDate } = req.body;
     let shortCode = customAlias || generateShortCode();
 
     const qrCodeDataURL = await qrcode.toDataURL(`${process.env.BASE_URL}/${shortCode}`);
 
-    const newUrl = {
-      originalUrl,
-      shortCode,
-      customAlias,
-      expiryDate,
-      createdAt: new Date(),
-      accessNumber: 0,
-    };
+    const newUrl = new Url(originalUrl, customAlias, expiryDate, shortCode, qrCodeDataURL);
 
-    const saved = await collection.insertOne(newUrl);
-    console.dir(saved);
-    await client.close();
+    const { data: url } = await client.query(
+      fql`let url: Any = Url.create(${newUrl});
+      ${urlResponse}`);
 
-    res.json({ shortUrl: `${process.env.BASE_URL}/${shortCode}`, qrCode: qrCodeDataURL, expiryDate, accessNumber: newUrl.accessNumber });
+    res.json({
+      shortUrl: `${process.env.BASE_URL}/${url.shortCode}`,
+      qrCode: qrCodeDataURL,
+      expiryDate: url.expiryDate,
+      accessNumber: url.accessNumber
+    });
   } catch (error) {
     console.error(error);
+
+    // Check for uniqueness constraint violation (duplicate short code or alias)
+    if (error.message.includes('instance already exists')) {
+      return res.status(400).json({ error: 'Custom alias already exists' });
+    }
+
     res.status(500).json({ error: 'Failed to shorten URL' });
   }
 });

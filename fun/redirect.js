@@ -1,16 +1,33 @@
 const express = require('express');
 const serverless = require('serverless-http');
-const connectToDatabase = require('../db/mongodb'); // Import the updated connectToDatabase function
+const connectToDatabase = require('../db/faunadb'); // Import the FaunaDB connection
+const { fql } = require('fauna');
 
 const app = express();
 
+const urlResponse = fql`
+  url {
+    id,
+    originalUrl,
+    customAlias,
+    expiryDate,
+    createdAt,
+    accessNumber,
+    qrCodeDataURL,
+    shortCode
+  }
+`;
+
 app.get('/:shortCode', async (req, res) => {
   try {
-    console.log('Request params:', req.params);
-    const { client, collection } = await connectToDatabase(); // Get the client, db, and collection
+    const client = await connectToDatabase();
     const { shortCode } = req.params;
 
-    const url = await collection.findOne({ shortCode }); // Use collection instead of Url.findOne()
+    // Fetch the URL data from FaunaDB
+    const {data: url} = await client.query(
+      fql`let url: Any = Url.byShortCode(${shortCode}).first()${urlResponse}`
+    );
+
     if (!url) {
       return res.status(404).send('Not Found');
     }
@@ -19,15 +36,21 @@ app.get('/:shortCode', async (req, res) => {
       return res.status(410).send('Gone'); // Expired
     }
 
-    // Update access count (using updateOne)
-    await collection.updateOne({ shortCode }, { $inc: { accessNumber: 1 } });
+    url.accessNumber++;
 
-    // Close the connection (optional but good practice)
-    await client.close();
+    const { data: urlSaved } = await client.query(
+      fql`let url: Any = Url.byId(${url.id})!.update({accessNumber: ${url.accessNumber}});
+      ${urlResponse}`);
 
-    res.redirect(302, url.originalUrl); // 302 Redirect
+    res.redirect(302, urlSaved.originalUrl); // 302 Redirect
   } catch (error) {
     console.error(error);
+
+    // Check if the error is due to the URL not being found
+    if (error.message === 'instance not found') {
+      return res.status(404).send('Not Found');
+    }
+
     res.status(500).send('Internal Server Error');
   }
 });
