@@ -15,7 +15,8 @@ const urlResponse = fql`
     customAlias,
     expiryDate,
     createdAt,
-    accessNumber
+    accessNumber,
+    shortCode
   }
 `;
 
