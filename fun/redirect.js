@@ -1,17 +1,16 @@
 const express = require('express');
-const mongoose = require('mongoose');
 const serverless = require('serverless-http');
-const { Url, connectToDatabase } = require('../db/mongodb');
+const connectToDatabase = require('../db/mongodb'); // Import the updated connectToDatabase function
 
 const app = express();
 
-app.get('/:shortCode', async (req, res) => { // Dynamic route for short codes
+app.get('/:shortCode', async (req, res) => {
   try {
     console.log('Request params:', req.params);
-    await connectToDatabase();
+    const { client, collection } = await connectToDatabase(); // Get the client, db, and collection
     const { shortCode } = req.params;
 
-    const url = await Url.findOne({ shortCode });
+    const url = await collection.findOne({ shortCode }); // Use collection instead of Url.findOne()
     if (!url) {
       return res.status(404).send('Not Found');
     }
@@ -20,10 +19,11 @@ app.get('/:shortCode', async (req, res) => { // Dynamic route for short codes
       return res.status(410).send('Gone'); // Expired
     }
 
-    url.accessNumber += 1;
-    await url.save();
+    // Update access count (using updateOne)
+    await collection.updateOne({ shortCode }, { $inc: { accessNumber: 1 } });
 
-    mongoose.connection.close() // Close the connection after use
+    // Close the connection (optional but good practice)
+    await client.close();
 
     res.redirect(302, url.originalUrl); // 302 Redirect
   } catch (error) {

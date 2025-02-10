@@ -1,6 +1,6 @@
 # ✨ arrasta.click - Backend ✨
 
-[![Netlify Status](https://api.netlify.com/api/v1/badges/YOUR_NETLIFY_SITE_ID/deploy-status)](https://app.netlify.com/sites/YOUR_NETLIFY_SITE_NAME/deploys)
+[![Netlify Status](https://api.netlify.com/api/v1/badges/arrasta-back/deploy-status)](https://app.netlify.com/sites/arrasta-back/deploys)
 
 👋 Hey there! This repository houses the magical backend 🪄 that powers the arrasta.click URL shortener. It's built with a sprinkle of Node.js, a dash of Express.js, and a whole lot of ❤️.
 
