@@ -2,8 +2,10 @@ const express = require('express');
 const serverless = require('serverless-http');
 const connectToDatabase = require('../db/faunadb'); // Import the FaunaDB connection
 const { fql } = require('fauna');
+const cors = require('cors');
 
 const app = express();
+app.use(cors());
 
 const urlResponse = fql`
   url {
