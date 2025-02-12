@@ -6,7 +6,7 @@ const connectToDatabase = async () => {
     const secret = process.env.FAUNA_KEY;
     const client = new Client({
         endpoint: new URL(process.env.FAUNA_ENDPOINT ?? "https://db.fauna.com"),
-        secret // Use your FaunaDB secret key
+        secret
     });
 
     console.log('Connected to FaunaDB');

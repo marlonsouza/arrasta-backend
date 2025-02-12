@@ -1,6 +1,7 @@
 [build]
   functions = "fun"
 [fun]
-  shorten = { path = "fun/shorten.js" } # Path to your function
-  redirect = { path = "fun/redirect.js" } # Path to your function
-  info = { path = "fun/info.js" } # Path to your function
+  prefer = { path = "fun/prefer.js" }
+  shorten = { path = "fun/shorten.js" }
+  redirect = { path = "fun/redirect.js" }
+  info = { path = "fun/info.js" }

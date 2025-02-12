@@ -1,5 +1,5 @@
-# Redirect requests for /shorten to /.netlify/functions/shorten
-/ https://app.arrasta.click 301
-/shorten /.netlify/functions/shorten 200
+/shorten /.netlify/functions/shorten 201
+/prefer /.netlify/functions/prefer 201
 /:shortCode /.netlify/functions/redirect/:shortCode 200
 /info/:shortCode /.netlify/functions/info/:shortCode 200
+/ https://app.arrasta.click 301

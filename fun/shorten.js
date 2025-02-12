@@ -1,7 +1,7 @@
 const express = require('express');
 const qrcode = require('qrcode');
 const serverless = require('serverless-http');
-const connectToDatabase = require('../db/faunadb'); // Import the FaunaDB connection
+const connectToDatabase = require('../db/faunadb');
 const cors = require('cors');
 
 const Url = require('../model/url');
