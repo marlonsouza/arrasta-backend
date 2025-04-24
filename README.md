@@ -74,10 +74,7 @@ FIREBASE_STORAGE_BUCKET=your-project-id.appspot.com
 FIREBASE_MESSAGING_SENDER_ID=your-messaging-sender-id
 FIREBASE_APP_ID=your-app-id
 
-# Firebase Admin SDK Configuration (Option 1: Service Account)
-# Download serviceAccountKey.json from Firebase Console and place it in the root directory
-
-# Firebase Admin SDK Configuration (Option 2: Environment Variables)
+# Firebase Admin SDK Configuration
 FIREBASE_PRIVATE_KEY_ID=your-private-key-id
 FIREBASE_PRIVATE_KEY="your-private-key"
 FIREBASE_CLIENT_EMAIL=your-client-email
@@ -95,8 +92,14 @@ TRANSACTION_AMOUNT=10.00
 7. **For Firebase Admin SDK setup:**
    - Go to Project Settings > Service Accounts
    - Click "Generate new private key"
-   - Save the downloaded JSON file as `serviceAccountKey.json` in your project root
-   - **IMPORTANT:** Add this file to your `.gitignore` to keep it secure
+   - Extract the following values from the downloaded JSON file:
+     - `private_key_id`
+     - `private_key`
+     - `client_email`
+     - `client_id`
+     - `client_x509_cert_url`
+   - Add these values to your `.env` file
+   - **IMPORTANT:** For `FIREBASE_PRIVATE_KEY`, make sure to include the entire key including the `-----BEGIN PRIVATE KEY-----` and `-----END PRIVATE KEY-----` parts
 
 ### Mercado Pago Setup
 
@@ -139,28 +142,16 @@ The API is protected with rate limiting to prevent abuse:
 - Custom key generator for serverless environments
 - Standard rate limit headers included in responses
 
-## Testing
-
-```bash
-# Test Firebase connection
-node test-firebase-connection.js
-
-# Test Firebase read operations
-node test-firebase-read.js
-
-# Test Firebase Admin SDK (requires serviceAccountKey.json or environment variables)
-node test-firebase-admin.js
-```
-
 ## Troubleshooting
 
 ### Firebase Permission Issues
 
 If you encounter "PERMISSION_DENIED" errors:
 
-1. Make sure you've set up the Firebase Admin SDK correctly
+1. Make sure you've set up the Firebase Admin SDK environment variables correctly
 2. Check that your service account has the necessary permissions
 3. Verify that your environment variables are correctly set in Netlify
+4. Ensure the `FIREBASE_PRIVATE_KEY` is properly formatted with newlines
 
 ### Rate Limiting Issues
 
