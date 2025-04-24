@@ -1,7 +1,7 @@
 const express = require('express');
 const qrcode = require('qrcode');
 const serverless = require('serverless-http');
-const connectToDatabase = require('../db/mongodb');
+const { connectToDatabase } = require('../db/mongodb');
 const cors = require('cors');
 
 const Url = require('../model/url');
@@ -13,7 +13,7 @@ app.use(cors());
 // Wrap your async function handler
 app.post('/shorten', async (req, res) => {
   try {
-    const { client, urlCollection } = await connectToDatabase();
+    const { urlCollection } = await connectToDatabase();
     const { originalUrl, customAlias, expiryDate } = req.body;
     let shortCode = customAlias || generateShortCode();
 
