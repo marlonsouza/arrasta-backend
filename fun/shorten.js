@@ -1,8 +1,9 @@
 const express = require('express');
 const qrcode = require('qrcode');
 const serverless = require('serverless-http');
-const { connectToDatabase } = require('../db/mongodb');
+const { connectToDatabase, createUrl, getUrlByShortCode } = require('../db/firebase');
 const cors = require('cors');
+const rateLimit = require('express-rate-limit');
 
 const Url = require('../model/url');
 
@@ -10,15 +11,27 @@ const app = express();
 app.use(express.json());
 app.use(cors());
 
+// Create a limiter that allows 10 requests per 15 minutes
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 10, // limit each IP to 10 requests per windowMs
+  message: { error: 'Too many requests, please try again later.' },
+  standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
+  legacyHeaders: false, // Disable the `X-RateLimit-*` headers
+});
+
+// Apply rate limiting to all routes
+app.use(limiter);
+
 // Wrap your async function handler
 app.post('/shorten', async (req, res) => {
   try {
-    const { urlCollection } = await connectToDatabase();
+    await connectToDatabase();
     const { originalUrl, customAlias, expiryDate } = req.body;
     let shortCode = customAlias || generateShortCode();
 
     // Check if shortCode already exists
-    const existingUrl = await urlCollection.findOne({ shortCode });
+    const existingUrl = await getUrlByShortCode(shortCode);
     if (existingUrl) {
       return res.status(400).json({ error: 'Custom alias already exists' });
     }
@@ -27,15 +40,12 @@ app.post('/shorten', async (req, res) => {
 
     const newUrl = new Url(originalUrl, customAlias, expiryDate, shortCode, qrCodeDataURL);
     
-    // Insert the new URL into MongoDB
-    const result = await urlCollection.insertOne(newUrl);
-    
-    // Get the inserted document
-    const url = await urlCollection.findOne({ _id: result.insertedId });
+    // Insert the new URL into Firebase
+    const url = await createUrl(newUrl);
 
     res.json({
       shortUrl: `${process.env.BASE_URL}/${url.shortCode}`,
-      qrCode: qrCodeDataURL,
+      qrCode: url.qrCodeDataURL,
       expiryDate: url.expiryDate,
       accessNumber: url.accessNumber
     });
