@@ -1,31 +1,46 @@
-const { initializeApp } = require('firebase/app');
-const { getFirestore, collection, doc, setDoc, getDoc, getDocs, query, where, updateDoc, increment } = require('firebase/firestore');
-const { getAuth } = require('firebase/auth');
+const admin = require('firebase-admin');
 require('dotenv').config();
 
-// Firebase configuration
-const firebaseConfig = {
-  apiKey: process.env.FIREBASE_API_KEY,
-  authDomain: process.env.FIREBASE_AUTH_DOMAIN,
-  projectId: process.env.FIREBASE_PROJECT_ID,
-  storageBucket: process.env.FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: process.env.FIREBASE_MESSAGING_SENDER_ID,
-  appId: process.env.FIREBASE_APP_ID,
-  measurementId: process.env.FIREBASE_MEASURE_ID
-};
+// Initialize Firebase Admin
+let db = null;
+let urlsCollection = null;
+let paymentsCollection = null;
 
-// Initialize Firebase
-const app = initializeApp(firebaseConfig);
-const db = getFirestore(app);
-const auth = getAuth(app);
-
-// Collection references
-const urlsCollection = collection(db, 'urls');
-const paymentsCollection = collection(db, 'payments');
-
-// Connect to database (Firebase doesn't need explicit connection)
+// Connect to database
 const connectToDatabase = async () => {
   try {
+    if (!db) {
+      // Create service account from environment variables
+      const serviceAccount = {
+        type: "service_account",
+        project_id: process.env.FIREBASE_PROJECT_ID,
+        private_key_id: process.env.FIREBASE_PRIVATE_KEY_ID,
+        private_key: process.env.FIREBASE_PRIVATE_KEY ? process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n') : undefined,
+        client_email: process.env.FIREBASE_CLIENT_EMAIL,
+        client_id: process.env.FIREBASE_CLIENT_ID,
+        auth_uri: "https://accounts.google.com/o/oauth2/auth",
+        token_uri: "https://oauth2.googleapis.com/token",
+        auth_provider_x509_cert_url: "https://www.googleapis.com/oauth2/v1/certs",
+        client_x509_cert_url: process.env.FIREBASE_CLIENT_CERT_URL
+      };
+
+      // Check if we have all the required fields
+      if (!serviceAccount.project_id || !serviceAccount.private_key || !serviceAccount.client_email) {
+        throw new Error('Missing required Firebase Admin SDK environment variables. Please check your configuration.');
+      }
+
+      // Initialize the app if it hasn't been initialized yet
+      if (!admin.apps.length) {
+        admin.initializeApp({
+          credential: admin.credential.cert(serviceAccount)
+        });
+      }
+
+      db = admin.firestore();
+      urlsCollection = db.collection('urls');
+      paymentsCollection = db.collection('payments');
+    }
+
     console.log('Firebase connection successful!');
     return { urlsCollection, paymentsCollection };
   } catch (error) {
@@ -34,17 +49,17 @@ const connectToDatabase = async () => {
   }
 };
 
-// Close connection (Firebase doesn't need explicit disconnection)
+// Close connection (Firebase Admin doesn't need explicit disconnection)
 const closeConnection = async () => {
   console.log('Firebase connection closed.');
 };
 
 // Helper functions for URL operations
 const createUrl = async (urlData) => {
-  const docRef = doc(urlsCollection);
-  const userId = auth.currentUser ? auth.currentUser.uid : 'anonymous';
+  const docRef = urlsCollection.doc();
+  const userId = 'anonymous'; // Since we're using Admin SDK, we don't have auth context
   
-  await setDoc(docRef, {
+  await docRef.set({
     ...urlData,
     id: docRef.id,
     userId: userId,
@@ -54,8 +69,8 @@ const createUrl = async (urlData) => {
 };
 
 const getUrlByShortCode = async (shortCode) => {
-  const q = query(urlsCollection, where('shortCode', '==', shortCode));
-  const querySnapshot = await getDocs(q);
+  const q = urlsCollection.where('shortCode', '==', shortCode);
+  const querySnapshot = await q.get();
   
   if (querySnapshot.empty) {
     return null;
@@ -66,18 +81,18 @@ const getUrlByShortCode = async (shortCode) => {
 };
 
 const incrementUrlAccess = async (urlId) => {
-  const urlRef = doc(urlsCollection, urlId);
-  await updateDoc(urlRef, {
-    accessNumber: increment(1)
+  const urlRef = urlsCollection.doc(urlId);
+  await urlRef.update({
+    accessNumber: admin.firestore.FieldValue.increment(1)
   });
 };
 
 // Helper functions for payment operations
 const createPayment = async (paymentData) => {
-  const docRef = doc(paymentsCollection);
-  const userId = auth.currentUser ? auth.currentUser.uid : 'anonymous';
+  const docRef = paymentsCollection.doc();
+  const userId = 'anonymous'; // Since we're using Admin SDK, we don't have auth context
   
-  await setDoc(docRef, {
+  await docRef.set({
     ...paymentData,
     id: docRef.id,
     userId: userId,
@@ -87,19 +102,19 @@ const createPayment = async (paymentData) => {
 };
 
 const getPaymentById = async (paymentId) => {
-  const paymentRef = doc(paymentsCollection, paymentId);
-  const paymentDoc = await getDoc(paymentRef);
+  const paymentRef = paymentsCollection.doc(paymentId);
+  const paymentDoc = await paymentRef.get();
   
-  if (!paymentDoc.exists()) {
+  if (!paymentDoc.exists) {
     return null;
   }
   
   return { id: paymentDoc.id, ...paymentDoc.data() };
 };
 
-// Get current user ID
+// Get current user ID (not applicable with Admin SDK)
 const getCurrentUserId = () => {
-  return auth.currentUser ? auth.currentUser.uid : 'anonymous';
+  return 'anonymous';
 };
 
 module.exports = {

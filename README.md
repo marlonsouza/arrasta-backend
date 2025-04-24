@@ -11,13 +11,17 @@
 * **Expiration Dates:** Control how long your links stay alive.
 * **Redirect with a snap:** Redirect users to the original URLs with lightning speed.
 * **Info at your fingertips:** Get all the juicy details about your shortened URLs.
+* **Rate Limiting:** Protect your API from abuse with configurable rate limits.
+* **Secure Firebase Integration:** Use Firebase Admin SDK for secure server-side operations.
 
 ## 💻 Technology Stack
 
 * **Node.js:** The JavaScript runtime that makes everything tick.
 * **Express.js:** The go-to framework for building web applications.
 * **Netlify Functions:** Serverless functions for easy deployment and scaling.
-* **MongoDB:** The database that holds all the precious links.
+* **Firebase/Firestore:** The database that holds all the precious links.
+* **Express Rate Limit:** Protect your API from abuse.
+* **Mercado Pago:** Handle payments seamlessly.
 
 ## 🛠️ Local Development
 
@@ -42,6 +46,7 @@ This project is automatically deployed to Netlify. You can find the live functio
     * **Response:** `{ shortUrl: string, qrCode: string, expiryDate?: Date }`
 * **GET /{shortCode}**: Redirects to the original URL.
 * **GET /info/{shortCode}**: Retrieves information about a short URL.
+* **POST /prefer**: Creates a payment preference for Mercado Pago.
 
 ## ❤️ Contributing
 
@@ -69,6 +74,13 @@ FIREBASE_STORAGE_BUCKET=your-project-id.appspot.com
 FIREBASE_MESSAGING_SENDER_ID=your-messaging-sender-id
 FIREBASE_APP_ID=your-app-id
 
+# Firebase Admin SDK Configuration
+FIREBASE_PRIVATE_KEY_ID=your-private-key-id
+FIREBASE_PRIVATE_KEY="your-private-key"
+FIREBASE_CLIENT_EMAIL=your-client-email
+FIREBASE_CLIENT_ID=your-client-id
+FIREBASE_CLIENT_CERT_URL=your-client-cert-url
+
 # Application Configuration
 BASE_URL=https://your-app-url.netlify.app
 MP_ACCESS_TOKEN=your-mercadopago-access-token
@@ -77,6 +89,17 @@ TRANSACTION_AMOUNT=10.00
 
 5. Set up Firestore Database in your Firebase project
 6. Create two collections: `urls` and `payments`
+7. **For Firebase Admin SDK setup:**
+   - Go to Project Settings > Service Accounts
+   - Click "Generate new private key"
+   - Extract the following values from the downloaded JSON file:
+     - `private_key_id`
+     - `private_key`
+     - `client_email`
+     - `client_id`
+     - `client_x509_cert_url`
+   - Add these values to your `.env` file
+   - **IMPORTANT:** For `FIREBASE_PRIVATE_KEY`, make sure to include the entire key including the `-----BEGIN PRIVATE KEY-----` and `-----END PRIVATE KEY-----` parts
 
 ### Mercado Pago Setup
 
@@ -97,14 +120,43 @@ npm run dev
 
 This project is configured for deployment on Netlify. Simply connect your repository to Netlify and it will automatically deploy your application.
 
+### Environment Variables in Netlify
+
+When deploying to Netlify, make sure to add all the necessary environment variables in the Netlify dashboard:
+
+1. Go to Site settings > Build & deploy > Environment
+2. Add each variable from your `.env` file
+3. For `FIREBASE_PRIVATE_KEY`, make sure to include the entire key including the `-----BEGIN PRIVATE KEY-----` and `-----END PRIVATE KEY-----` parts
+
 ## API Endpoints
 
 - `POST /shorten` - Create a shortened URL
 - `GET /info/:shortCode` - Get information about a shortened URL
 - `POST /prefer` - Create a payment preference
 
-## Testing
+## Rate Limiting
 
-```bash
-node test-firebase.js
-```
+The API is protected with rate limiting to prevent abuse:
+
+- 10 requests per 15 minutes per IP address
+- Custom key generator for serverless environments
+- Standard rate limit headers included in responses
+
+## Troubleshooting
+
+### Firebase Permission Issues
+
+If you encounter "PERMISSION_DENIED" errors:
+
+1. Make sure you've set up the Firebase Admin SDK environment variables correctly
+2. Check that your service account has the necessary permissions
+3. Verify that your environment variables are correctly set in Netlify
+4. Ensure the `FIREBASE_PRIVATE_KEY` is properly formatted with newlines
+
+### Rate Limiting Issues
+
+If you see rate limiting errors in your Netlify Functions logs:
+
+1. Make sure you've set `app.set('trust proxy', 1)` in your Express app
+2. Check that your custom key generator is working correctly
+3. Consider adjusting the rate limit parameters if needed
