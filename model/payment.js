@@ -5,6 +5,7 @@ class Payment {
         this.status = null;
         this.idMerchantOrder = null;
         this.quantity = quantity;
+        this.createdAt = new Date();
     }
 }
 

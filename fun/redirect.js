@@ -1,58 +1,36 @@
 const express = require('express');
 const serverless = require('serverless-http');
-const connectToDatabase = require('../db/faunadb'); // Import the FaunaDB connection
-const { fql } = require('fauna');
+const connectToDatabase = require('../db/mongodb');
 const cors = require('cors');
 
 const app = express();
 app.use(cors());
 
-const urlResponse = fql`
-  url {
-    id,
-    originalUrl,
-    customAlias,
-    expiryDate,
-    createdAt,
-    accessNumber,
-    qrCodeDataURL,
-    shortCode
-  }
-`;
-
 app.get('/:shortCode', async (req, res) => {
   try {
-    const client = await connectToDatabase();
+    const { client, urlCollection } = await connectToDatabase();
     const { shortCode } = req.params;
 
-    // Fetch the URL data from FaunaDB
-    const {data: url} = await client.query(
-      fql`let url: Any = Url.byShortCode(${shortCode}).first()${urlResponse}`
-    );
+    // Fetch the URL data from MongoDB
+    const url = await urlCollection.findOne({ shortCode });
 
     if (!url) {
       return res.status(404).send('Not Found');
     }
 
-    if (url.expiryDate && url.expiryDate < new Date()) {
+    if (url.expiryDate && new Date(url.expiryDate) < new Date()) {
       return res.status(410).send('Gone'); // Expired
     }
 
-    url.accessNumber++;
+    // Increment access number
+    await urlCollection.updateOne(
+      { _id: url._id },
+      { $inc: { accessNumber: 1 } }
+    );
 
-    const { data: urlSaved } = await client.query(
-      fql`let url: Any = Url.byId(${url.id})!.update({accessNumber: ${url.accessNumber}});
-      ${urlResponse}`);
-
-    res.redirect(302, urlSaved.originalUrl); // 302 Redirect
+    res.redirect(302, url.originalUrl); // 302 Redirect
   } catch (error) {
     console.error(error);
-
-    // Check if the error is due to the URL not being found
-    if (error.message === 'instance not found') {
-      return res.status(404).send('Not Found');
-    }
-
     res.status(500).send('Internal Server Error');
   }
 });

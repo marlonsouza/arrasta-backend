@@ -1,24 +1,50 @@
 const { MongoClient } = require('mongodb');
 require('dotenv').config();
 
+let client = null;
+let urlCollection = null;
+let paymentCollection = null;
+
 const connectToDatabase = async () => {
   try {
-    const uri = process.env.MONGODB_URI;
-    const client = new MongoClient(uri, {
-      useNewUrlParser: true,
-      useUnifiedTopology: true,
-    });
-    await client.connect();
-    console.log('Connected to MongoDB Atlas Data API');
+    if (!client) {
+      const options = {
+        tls: true,
+        retryWrites: true,
+        w: 'majority',
+        serverSelectionTimeoutMS: 5000,
+        socketTimeoutMS: 45000
+      };
 
-    const db = client.db('arrasta_db');
-    const collection = db.collection('urls');
+      client = new MongoClient(process.env.MONGODB_URI, options);
+      await client.connect();
+      console.log('MongoDB connection successful!');
 
-    return { client, collection };
+      const db = client.db('arrasta');
+      urlCollection = db.collection('urls');
+      paymentCollection = db.collection('payments');
+    }
+
+    return { urlCollection, paymentCollection };
   } catch (error) {
-    console.error('MongoDB Atlas Data API connection error:', error);
+    console.error('MongoDB connection error:', error);
     throw error;
   }
 };
 
-module.exports = connectToDatabase;
+const closeConnection = async () => {
+  if (client) {
+    await client.close();
+    client = null;
+    urlCollection = null;
+    paymentCollection = null;
+    console.log('MongoDB connection closed.');
+  }
+};
+
+module.exports = {
+  connectToDatabase,
+  closeConnection,
+  getUrlCollection: () => urlCollection,
+  getPaymentCollection: () => paymentCollection
+};

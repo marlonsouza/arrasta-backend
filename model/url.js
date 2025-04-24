@@ -5,6 +5,8 @@ class Url {
         this.expiryDate = expiryDate;
         this.shortCode = shortCode;
         this.qrCodeDataURL = qrCodeDataURL;
+        this.createdAt = new Date();
+        this.accessNumber = 0;
     }
 }
 
