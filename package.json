@@ -13,8 +13,8 @@
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
-    "fauna": "^2.5.0",
     "mercadopago": "^2.3.0",
+    "mongodb": "^6.16.0",
     "qrcode": "^1.5.4",
     "serverless-http": "^3.2.0"
   },
