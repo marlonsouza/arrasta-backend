@@ -3,7 +3,7 @@ const cors = require('cors');
 const serverless = require('serverless-http');
 const { MercadoPagoConfig, Preference } = require('mercadopago'); // Import the Mercado Pago SDK
 const Payment = require('../model/payment');
-const { connectToDatabase } = require('../db/mongodb'); 
+const { connectToDatabase, createPayment } = require('../db/firebase'); 
 
 const REASON = 'arrasta.click assinatura mensal'; // Define the reason for the preapproval plan
 
@@ -36,12 +36,12 @@ app.post('/prefer', async (req, res) => {
 
     preferente.create({ body })
         .then(async response => {
-            const { paymentCollection } = await connectToDatabase();
+            await connectToDatabase();
 
             const payment = new Payment(idUrl, response.id, quantity);
 
-            // Insert the payment into MongoDB
-            await paymentCollection.insertOne(payment);
+            // Insert the payment into Firebase
+            await createPayment(payment);
 
             res.status(201).json({ id: response.id });
         })
