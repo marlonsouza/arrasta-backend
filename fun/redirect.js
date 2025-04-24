@@ -19,15 +19,26 @@ app.get('/:shortCode', async (req, res) => {
     }
 
     // Check if the URL has expired
-    // Only check if expiryDate exists and is not null/undefined
     if (url.expiryDate) {
-      const expiryDate = new Date(url.expiryDate);
+      // Parse the expiry date - handle both ISO strings and date-only strings
+      let expiryDate;
+      
+      if (url.expiryDate.includes('T')) {
+        // Full ISO string with time component
+        expiryDate = new Date(url.expiryDate);
+      } else {
+        // Date-only string (YYYY-MM-DD)
+        // Set to end of day to allow the entire day
+        const [year, month, day] = url.expiryDate.split('-').map(Number);
+        expiryDate = new Date(year, month - 1, day, 23, 59, 59, 999);
+      }
+      
       const currentDate = new Date();
       
       // Log the dates for debugging
-      console.log(`URL: ${shortCode}, Expiry: ${expiryDate}, Current: ${currentDate}`);
+      console.log(`URL: ${shortCode}, Expiry: ${expiryDate.toISOString()}, Current: ${currentDate.toISOString()}`);
       
-      if (expiryDate < currentDate) {
+      if (currentDate > expiryDate) {
         console.log(`URL ${shortCode} has expired`);
         return res.status(410).send('Gone'); // Expired
       }
