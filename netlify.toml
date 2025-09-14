@@ -5,3 +5,4 @@
   shorten = { path = "fun/shorten.js" }
   redirect = { path = "fun/redirect.js" }
   info = { path = "fun/info.js" }
+  cleanup = { path = "fun/cleanup.js" }

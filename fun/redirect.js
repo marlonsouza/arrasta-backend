@@ -47,10 +47,16 @@ app.get('/:shortCode', async (req, res) => {
     // Increment access number
     await incrementUrlAccess(url.id);
 
+    // Ensure the URL has a protocol for proper redirection
+    let redirectUrl = url.originalUrl;
+    if (!redirectUrl.startsWith('http://') && !redirectUrl.startsWith('https://')) {
+      redirectUrl = 'http://' + redirectUrl;
+    }
+
     // Log the redirect for debugging
-    console.log(`Redirecting ${shortCode} to ${url.originalUrl}`);
-    
-    res.redirect(302, url.originalUrl); // 302 Redirect
+    console.log(`Redirecting ${shortCode} to ${redirectUrl}`);
+
+    res.redirect(302, redirectUrl); // 302 Redirect
   } catch (error) {
     console.error('Redirect error:', error);
     res.status(500).send('Internal Server Error');
