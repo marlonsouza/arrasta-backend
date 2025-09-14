@@ -29,16 +29,10 @@ jobs:
       working-directory: ./functions
       run: npm run lint
 
-    - name: Authenticate with Firebase
+    - name: Deploy Firebase Functions
       env:
         FIREBASE_SERVICE_ACCOUNT_KEY: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_KEY }}
+        GOOGLE_APPLICATION_CREDENTIALS: ./service-account-key.json
       run: |
-        echo "$FIREBASE_SERVICE_ACCOUNT_KEY" > $HOME/service-account.json
-        chmod 600 $HOME/service-account.json
-        export GOOGLE_APPLICATION_CREDENTIALS=$HOME/service-account.json
-        firebase use arrasta-click
-
-    - name: Deploy Firebase Functions
-      run: firebase deploy --only functions --project arrasta-click
-      env:
-        GOOGLE_APPLICATION_CREDENTIALS: $HOME/service-account.json
+        echo "$FIREBASE_SERVICE_ACCOUNT_KEY" > service-account-key.json
+        firebase deploy --only functions --project arrasta-click
