@@ -30,7 +30,10 @@ jobs:
       run: npm run lint
 
     - name: Authenticate with Firebase
-      run: echo '${{ secrets.FIREBASE_SERVICE_ACCOUNT_KEY }}' > $HOME/service-account.json
+      run: |
+        echo '${{ secrets.FIREBASE_SERVICE_ACCOUNT_KEY }}' > $HOME/service-account.json
+        export GOOGLE_APPLICATION_CREDENTIALS=$HOME/service-account.json
+        firebase use arrasta-click
 
     - name: Deploy Firebase Functions
       run: firebase deploy --only functions
