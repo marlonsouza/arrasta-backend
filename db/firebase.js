@@ -112,6 +112,47 @@ const getPaymentById = async (paymentId) => {
   return { id: paymentDoc.id, ...paymentDoc.data() };
 };
 
+// Delete expired URLs
+const deleteExpiredUrls = async () => {
+  const currentDate = new Date();
+  const querySnapshot = await urlsCollection.get();
+  const batch = db.batch();
+  let deletedCount = 0;
+
+  querySnapshot.forEach((doc) => {
+    const data = doc.data();
+    
+    if (data.expiryDate) {
+      let expiryDate;
+      
+      if (data.expiryDate.includes('T')) {
+        // Full ISO string with time component
+        expiryDate = new Date(data.expiryDate);
+      } else {
+        // Date-only string (YYYY-MM-DD)
+        // Set to end of day to allow the entire day
+        const [year, month, day] = data.expiryDate.split('-').map(Number);
+        expiryDate = new Date(year, month - 1, day, 23, 59, 59, 999);
+      }
+      
+      if (currentDate > expiryDate) {
+        batch.delete(doc.ref);
+        deletedCount++;
+        console.log(`Marking expired URL for deletion: ${data.shortCode} (expired: ${data.expiryDate})`);
+      }
+    }
+  });
+
+  if (deletedCount > 0) {
+    await batch.commit();
+    console.log(`Successfully deleted ${deletedCount} expired URLs`);
+  } else {
+    console.log('No expired URLs found to delete');
+  }
+
+  return deletedCount;
+};
+
 // Get current user ID (not applicable with Admin SDK)
 const getCurrentUserId = () => {
   return 'anonymous';
@@ -125,5 +166,6 @@ module.exports = {
   incrementUrlAccess,
   createPayment,
   getPaymentById,
-  getCurrentUserId
+  getCurrentUserId,
+  deleteExpiredUrls
 }; 
