@@ -4,17 +4,15 @@ const {initializeApp} = require("firebase-admin/app");
 const {getFirestore} = require("firebase-admin/firestore");
 const logger = require("firebase-functions/logger");
 
-// Initialize Firebase Admin
 initializeApp();
 const db = getFirestore();
 
 setGlobalOptions({maxInstances: 10});
 
-// Scheduled function to cleanup expired URLs
 exports.cleanupExpiredUrls = onSchedule(
     {
-      schedule: "0 2 * * *", // Daily at 2 AM UTC
-      timeZone: "America/Sao_Paulo", // Adjust to your timezone
+      schedule: "0 2 * * *",
+      timeZone: "America/Sao_Paulo",
     },
     async (event) => {
       logger.info("Starting cleanup of expired URLs...");
@@ -33,11 +31,8 @@ exports.cleanupExpiredUrls = onSchedule(
             let expiryDate;
 
             if (data.expiryDate.includes("T")) {
-              // Full ISO string with time component
               expiryDate = new Date(data.expiryDate);
             } else {
-              // Date-only string (YYYY-MM-DD)
-              // Set to end of day to allow the entire day
               const [year, month, day] = data.expiryDate.split("-")
                   .map(Number);
               expiryDate = new Date(year, month - 1, day, 23, 59, 59, 999);
