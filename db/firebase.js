@@ -104,12 +104,46 @@ const createPayment = async (paymentData) => {
 const getPaymentById = async (paymentId) => {
   const paymentRef = paymentsCollection.doc(paymentId);
   const paymentDoc = await paymentRef.get();
-  
+
   if (!paymentDoc.exists) {
     return null;
   }
-  
+
   return { id: paymentDoc.id, ...paymentDoc.data() };
+};
+
+const getPaymentByIdPayment = async (idPayment) => {
+  const q = paymentsCollection.where('idPayment', '==', idPayment);
+  const querySnapshot = await q.get();
+
+  if (querySnapshot.empty) {
+    return null;
+  }
+
+  const doc = querySnapshot.docs[0];
+  return { id: doc.id, ...doc.data() };
+};
+
+const updatePaymentStatus = async (idPayment, status, idMerchantOrder = null) => {
+  const q = paymentsCollection.where('idPayment', '==', idPayment);
+  const querySnapshot = await q.get();
+
+  if (querySnapshot.empty) {
+    throw new Error(`Payment with idPayment ${idPayment} not found`);
+  }
+
+  const doc = querySnapshot.docs[0];
+  const updateData = {
+    status: status,
+    updatedAt: new Date().toISOString()
+  };
+
+  if (idMerchantOrder) {
+    updateData.idMerchantOrder = idMerchantOrder;
+  }
+
+  await doc.ref.update(updateData);
+  return { id: doc.id, ...doc.data(), ...updateData };
 };
 
 // Delete expired URLs
@@ -166,6 +200,8 @@ module.exports = {
   incrementUrlAccess,
   createPayment,
   getPaymentById,
+  getPaymentByIdPayment,
+  updatePaymentStatus,
   getCurrentUserId,
   deleteExpiredUrls
 }; 
