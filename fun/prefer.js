@@ -1,10 +1,11 @@
 const express = require('express');
 const cors = require('cors');
 const serverless = require('serverless-http');
-const { MercadoPagoConfig, Preference } = require('mercadopago'); // Import the Mercado Pago SDK
+const { MercadoPagoConfig, Preference, Payment: MPPayment } = require('mercadopago'); // Import the Mercado Pago SDK
 const Payment = require('../model/payment');
-const { connectToDatabase, createPayment } = require('../db/firebase'); 
+const { connectToDatabase, createPayment, getPaymentByIdPayment, updatePaymentStatus } = require('../db/firebase');
 const rateLimit = require('express-rate-limit');
+const crypto = require('crypto');
 
 const REASON = 'arrasta.click assinatura mensal'; // Define the reason for the preapproval plan
 
@@ -38,42 +39,206 @@ app.use(limiter);
 
 const mercadoPagoConfig = new MercadoPagoConfig({ accessToken: process.env.MP_ACCESS_TOKEN, options: { timeout: 5000 } });
 
+// Function to validate MercadoPago webhook signature
+const validateSignature = (xSignature, payload) => {
+  try {
+    const parts = xSignature.split(',');
+    let timestamp, signature;
+
+    for (const part of parts) {
+      const [key, value] = part.split('=');
+      if (key && value) {
+        const trimmedKey = key.trim();
+        const trimmedValue = value.trim();
+        if (trimmedKey === 'ts') {
+          timestamp = trimmedValue;
+        } else if (trimmedKey === 'v1') {
+          signature = trimmedValue;
+        }
+      }
+    }
+
+    if (!timestamp || !signature) {
+      return false;
+    }
+
+    // Create the string to sign: id + request_url + timestamp
+    const dataToSign = `${payload.data?.id || ''}${timestamp}`;
+
+    // Create HMAC with your webhook secret (you'll need to add this to .env)
+    const expectedSignature = crypto
+      .createHmac('sha256', process.env.MP_WEBHOOK_SECRET || '')
+      .update(dataToSign)
+      .digest('hex');
+
+    return signature === expectedSignature;
+  } catch (error) {
+    console.error('Error validating signature:', error);
+    return false;
+  }
+};
+
 app.post('/prefer', async (req, res) => {
-    const { idUrl, quantity } = req.body;
-    const body = {
-        items: [
-            {
-                title: REASON,
-                quantity,
-                currency_id: 'BRL',
-                unit_price: Number(process.env.TRANSACTION_AMOUNT)
+    try {
+        const { idUrl, quantity } = req.body;
+
+        // Validate required fields
+        if (!idUrl || !quantity) {
+            return res.status(400).json({
+                error: 'Missing required fields: idUrl and quantity are required'
+            });
+        }
+
+        // Validate quantity is a positive number
+        if (!Number.isInteger(quantity) || quantity <= 0) {
+            return res.status(400).json({
+                error: 'Quantity must be a positive integer'
+            });
+        }
+
+        // Validate environment variables
+        if (!process.env.TRANSACTION_AMOUNT || !process.env.BASE_URL) {
+            console.error('Missing required environment variables');
+            return res.status(500).json({
+                error: 'Server configuration error'
+            });
+        }
+
+        const body = {
+            items: [
+                {
+                    title: REASON,
+                    quantity,
+                    currency_id: 'BRL',
+                    unit_price: Number(process.env.TRANSACTION_AMOUNT)
+                }
+            ],
+            back_urls: {
+                success: process.env.BASE_URL,
+                pending: process.env.BASE_URL,
+                failure: process.env.BASE_URL
+            },
+            auto_return: 'approved',
+        };
+
+        const preferente = new Preference(mercadoPagoConfig);
+
+        const response = await preferente.create({ body });
+
+        await connectToDatabase();
+
+        const payment = new Payment(idUrl, response.id, quantity);
+
+        // Insert the payment into Firebase
+        await createPayment(payment);
+
+        res.status(201).json({ id: response.id });
+    } catch (error) {
+        console.error('Preference creation error:', error);
+
+        // Handle specific MercadoPago errors
+        if (error.status) {
+            return res.status(error.status).json({
+                error: `MercadoPago API error: ${error.message}`
+            });
+        }
+
+        // Handle database errors
+        if (error.message && error.message.includes('Firebase')) {
+            return res.status(500).json({
+                error: 'Database error occurred'
+            });
+        }
+
+        // Generic error handler
+        res.status(500).json({
+            error: 'Failed to create payment preference'
+        });
+    }
+});
+
+// Webhook endpoint for MercadoPago notifications
+app.post('/webhook', async (req, res) => {
+    try {
+        const xSignature = req.headers['x-signature'];
+        const payload = req.body;
+
+        // Validate signature if webhook secret is configured
+        if (process.env.MP_WEBHOOK_SECRET && xSignature) {
+            if (!validateSignature(xSignature, payload)) {
+                console.error('Invalid webhook signature');
+                return res.status(401).json({ error: 'Invalid signature' });
             }
-        ],
-        back_urls: {
-            success: process.env.BASE_URL,
-            pending: process.env.BASE_URL,
-            failure: process.env.BASE_URL
-        },
-        auto_return: 'approved',
-    };
+        }
 
-    const preferente = new Preference(mercadoPagoConfig);
-
-    preferente.create({ body })
-        .then(async response => {
+        // Handle payment notifications
+        if (payload.type === 'payment') {
             await connectToDatabase();
 
-            const payment = new Payment(idUrl, response.id, quantity);
+            const paymentId = payload.data.id;
 
-            // Insert the payment into Firebase
-            await createPayment(payment);
+            // Get payment details from MercadoPago API
+            const mpPayment = new MPPayment(mercadoPagoConfig);
+            const paymentDetails = await mpPayment.get({ id: paymentId });
 
-            res.status(201).json({ id: response.id });
-        })
-        .catch(error => {
-            console.error(error);
-            res.status(500).json({ error: 'Failed to create payment preference' });
+            // Update payment status in our database
+            await updatePaymentStatus(
+                paymentDetails.id.toString(),
+                paymentDetails.status,
+                paymentDetails.merchant_order_id
+            );
+
+            console.log(`Payment ${paymentId} status updated to: ${paymentDetails.status}`);
+        }
+
+        // Always respond with 200 to acknowledge receipt
+        res.status(200).json({ success: true });
+    } catch (error) {
+        console.error('Webhook error:', error);
+        // Still respond with 200 to prevent MercadoPago from retrying
+        res.status(200).json({ error: 'Internal error' });
+    }
+});
+
+// Payment verification endpoint
+app.get('/payment/:id/verify', async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        await connectToDatabase();
+
+        // Get payment from our database
+        const localPayment = await getPaymentByIdPayment(id);
+        if (!localPayment) {
+            return res.status(404).json({ error: 'Payment not found' });
+        }
+
+        // Get current status from MercadoPago API
+        const mpPayment = new MPPayment(mercadoPagoConfig);
+        const paymentDetails = await mpPayment.get({ id: id });
+
+        // Update local status if different
+        if (localPayment.status !== paymentDetails.status) {
+            await updatePaymentStatus(
+                id,
+                paymentDetails.status,
+                paymentDetails.merchant_order_id
+            );
+        }
+
+        res.json({
+            id: paymentDetails.id,
+            status: paymentDetails.status,
+            status_detail: paymentDetails.status_detail,
+            transaction_amount: paymentDetails.transaction_amount,
+            currency_id: paymentDetails.currency_id,
+            date_created: paymentDetails.date_created,
+            date_last_updated: paymentDetails.date_last_updated
         });
+    } catch (error) {
+        console.error('Payment verification error:', error);
+        res.status(500).json({ error: 'Failed to verify payment' });
+    }
 });
 
 exports.handler = serverless(app);
