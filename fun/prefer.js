@@ -1,3 +1,4 @@
+require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const serverless = require('serverless-http');
@@ -99,6 +100,8 @@ app.post('/prefer', async (req, res) => {
         // Validate environment variables
         if (!process.env.TRANSACTION_AMOUNT || !process.env.BASE_URL) {
             console.error('Missing required environment variables');
+            console.error('TRANSACTION_AMOUNT:', process.env.TRANSACTION_AMOUNT);
+            console.error('BASE_URL:', process.env.BASE_URL);
             return res.status(500).json({
                 error: 'Server configuration error'
             });
