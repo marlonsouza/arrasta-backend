@@ -98,10 +98,11 @@ app.post('/prefer', async (req, res) => {
         }
 
         // Validate environment variables
-        if (!process.env.TRANSACTION_AMOUNT || !process.env.BASE_URL) {
+        if (!process.env.TRANSACTION_AMOUNT || !process.env.BASE_URL || !process.env.MP_RETURN_URL) {
             console.error('Missing required environment variables');
             console.error('TRANSACTION_AMOUNT:', process.env.TRANSACTION_AMOUNT);
             console.error('BASE_URL:', process.env.BASE_URL);
+            console.error('MP_RETURN_URL:', process.env.MP_RETURN_URL);
             return res.status(500).json({
                 error: 'Server configuration error'
             });
@@ -116,10 +117,10 @@ app.post('/prefer', async (req, res) => {
                     unit_price: Number(process.env.TRANSACTION_AMOUNT)
                 }
             ],
-            back_urls: {
-                success: process.env.BASE_URL,
-                pending: process.env.BASE_URL,
-                failure: process.env.BASE_URL
+            back_url: {
+                success: process.env.MP_RETURN_URL + '/@/success',
+                pending: process.env.MP_RETURN_URL + '/@/pending',
+                failure: process.env.MP_RETURN_URL + '/@/failure'
             },
             auto_return: 'approved',
         };
