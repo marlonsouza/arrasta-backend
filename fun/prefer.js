@@ -117,7 +117,7 @@ app.post('/prefer', async (req, res) => {
                     unit_price: Number(process.env.TRANSACTION_AMOUNT)
                 }
             ],
-            back_url: {
+            back_urls: {
                 success: process.env.MP_RETURN_URL + '/@/success',
                 pending: process.env.MP_RETURN_URL + '/@/pending',
                 failure: process.env.MP_RETURN_URL + '/@/failure'
