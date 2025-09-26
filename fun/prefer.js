@@ -4,11 +4,28 @@ const cors = require('cors');
 const serverless = require('serverless-http');
 const { MercadoPagoConfig, Preference, Payment: MPPayment } = require('mercadopago'); // Import the Mercado Pago SDK
 const Payment = require('../model/payment');
-const { connectToDatabase, createPayment, getPaymentByIdPayment, updatePaymentStatus } = require('../db/firebase');
+const Url = require('../model/url');
+const qrcode = require('qrcode');
+const { connectToDatabase, createPayment, getPaymentByIdPayment, updatePaymentStatus, createPendingPayment, getPendingPaymentBySessionId, updatePendingPaymentStatus, createUrl, getUrlByShortCode } = require('../db/firebase');
 const rateLimit = require('express-rate-limit');
 const crypto = require('crypto');
 
 const REASON = 'arrasta.click assinatura mensal'; // Define the reason for the preapproval plan
+
+// Generate unique session ID
+const generateSessionId = () => {
+  return `session_${Date.now()}_${Math.random().toString(36).substring(2, 15)}`;
+};
+
+// Generate short code for URLs
+const generateShortCode = () => {
+  const characters = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+  let result = '';
+  for (let i = 0; i < 6; i++) {
+    result += characters.charAt(Math.floor(Math.random() * characters.length));
+  }
+  return result;
+};
 
 const app = express();
 app.use(express.json());
@@ -43,11 +60,21 @@ const mercadoPagoConfig = new MercadoPagoConfig({ accessToken: process.env.MP_AC
 // Function to validate MercadoPago webhook signature
 const validateSignature = (xSignature, payload) => {
   try {
+    if (!process.env.MP_WEBHOOK_SECRET) {
+      console.warn('MP_WEBHOOK_SECRET not configured, skipping signature validation');
+      return true;
+    }
+
+    if (!xSignature || !xSignature.includes('ts=') || !xSignature.includes('v1=')) {
+      console.error('Invalid x-signature format');
+      return false;
+    }
+
     const parts = xSignature.split(',');
     let timestamp, signature;
 
     for (const part of parts) {
-      const [key, value] = part.split('=');
+      const [key, value] = part.split('=', 2);
       if (key && value) {
         const trimmedKey = key.trim();
         const trimmedValue = value.trim();
@@ -60,19 +87,40 @@ const validateSignature = (xSignature, payload) => {
     }
 
     if (!timestamp || !signature) {
+      console.error('Missing timestamp or signature in x-signature header');
+      return false;
+    }
+
+    // Validate timestamp (prevent replay attacks - 5 minutes window)
+    const currentTimestamp = Math.floor(Date.now() / 1000);
+    const webhookTimestamp = parseInt(timestamp);
+    const timeDifference = Math.abs(currentTimestamp - webhookTimestamp);
+
+    if (timeDifference > 300) { // 5 minutes
+      console.error(`Webhook timestamp too old: ${timeDifference} seconds difference`);
       return false;
     }
 
     // Create the string to sign: id + request_url + timestamp
-    const dataToSign = `${payload.data?.id || ''}${timestamp}`;
+    const dataId = payload.data?.id || '';
+    const dataToSign = `${dataId}${timestamp}`;
 
-    // Create HMAC with your webhook secret (you'll need to add this to .env)
+    // Create HMAC with webhook secret
     const expectedSignature = crypto
-      .createHmac('sha256', process.env.MP_WEBHOOK_SECRET || '')
+      .createHmac('sha256', process.env.MP_WEBHOOK_SECRET)
       .update(dataToSign)
       .digest('hex');
 
-    return signature === expectedSignature;
+    const isValid = signature === expectedSignature;
+
+    if (!isValid) {
+      console.error('Signature validation failed');
+      console.error('Expected:', expectedSignature);
+      console.error('Received:', signature);
+      console.error('Data signed:', dataToSign);
+    }
+
+    return isValid;
   } catch (error) {
     console.error('Error validating signature:', error);
     return false;
@@ -81,12 +129,12 @@ const validateSignature = (xSignature, payload) => {
 
 app.post('/prefer', async (req, res) => {
     try {
-        const { idUrl, quantity } = req.body;
+        const { originalUrl, customAlias, expiryDate, quantity = 1 } = req.body;
 
         // Validate required fields
-        if (!idUrl || !quantity) {
+        if (!originalUrl) {
             return res.status(400).json({
-                error: 'Missing required fields: idUrl and quantity are required'
+                error: 'Missing required fields: originalUrl is required'
             });
         }
 
@@ -100,13 +148,15 @@ app.post('/prefer', async (req, res) => {
         // Validate environment variables
         if (!process.env.TRANSACTION_AMOUNT || !process.env.BASE_URL || !process.env.MP_RETURN_URL) {
             console.error('Missing required environment variables');
-            console.error('TRANSACTION_AMOUNT:', process.env.TRANSACTION_AMOUNT);
-            console.error('BASE_URL:', process.env.BASE_URL);
-            console.error('MP_RETURN_URL:', process.env.MP_RETURN_URL);
             return res.status(500).json({
                 error: 'Server configuration error'
             });
         }
+
+        await connectToDatabase();
+
+        // Generate unique session ID
+        const sessionId = generateSessionId();
 
         const body = {
             items: [
@@ -118,25 +168,41 @@ app.post('/prefer', async (req, res) => {
                 }
             ],
             back_urls: {
-                success: process.env.MP_RETURN_URL + '/@/success',
-                pending: process.env.MP_RETURN_URL + '/@/pending',
-                failure: process.env.MP_RETURN_URL + '/@/failure'
+                success: `${process.env.BASE_URL}/.netlify/functions/prefer/return/success?session_id=${sessionId}`,
+                pending: `${process.env.BASE_URL}/.netlify/functions/prefer/return/pending?session_id=${sessionId}`,
+                failure: `${process.env.BASE_URL}/.netlify/functions/prefer/return/failure?session_id=${sessionId}`
             },
             auto_return: 'approved',
+            external_reference: sessionId,
+            notification_url: `${process.env.BASE_URL}/.netlify/functions/prefer/webhook`
         };
 
         const preferente = new Preference(mercadoPagoConfig);
-
         const response = await preferente.create({ body });
 
-        await connectToDatabase();
+        // Store pending payment data
+        const pendingPaymentData = {
+            sessionId,
+            preferenceId: response.id,
+            originalUrl,
+            customAlias,
+            expiryDate,
+            paymentData: {
+                quantity,
+                amount: Number(process.env.TRANSACTION_AMOUNT)
+            }
+        };
 
-        const payment = new Payment(idUrl, response.id, quantity);
+        await createPendingPayment(pendingPaymentData);
 
-        // Insert the payment into Firebase
+        // Still create the old payment record for backward compatibility
+        const payment = new Payment(sessionId, response.id, quantity);
         await createPayment(payment);
 
-        res.status(201).json({ id: response.id });
+        res.status(201).json({
+            id: response.id,
+            sessionId: sessionId
+        });
     } catch (error) {
         console.error('Preference creation error:', error);
 
@@ -185,14 +251,75 @@ app.post('/webhook', async (req, res) => {
             const mpPayment = new MPPayment(mercadoPagoConfig);
             const paymentDetails = await mpPayment.get({ id: paymentId });
 
-            // Update payment status in our database
+            console.log(`Processing payment ${paymentId} with status: ${paymentDetails.status}`);
+
+            // Update payment status in our database (backward compatibility)
             await updatePaymentStatus(
                 paymentDetails.id.toString(),
                 paymentDetails.status,
                 paymentDetails.merchant_order_id
             );
 
-            console.log(`Payment ${paymentId} status updated to: ${paymentDetails.status}`);
+            // Handle approved payments - create premium URL
+            if (paymentDetails.status === 'approved') {
+                const sessionId = paymentDetails.external_reference;
+
+                if (sessionId) {
+                    // Get pending payment data
+                    const pendingPayment = await getPendingPaymentBySessionId(sessionId);
+
+                    if (pendingPayment && pendingPayment.status === 'pending') {
+                        try {
+                            // Update status to processing
+                            await updatePendingPaymentStatus(sessionId, 'processing');
+
+                            // Generate short code for URL
+                            let shortCode = pendingPayment.customAlias || generateShortCode();
+
+                            // Check if shortCode already exists, generate new one if needed
+                            let existingUrl = await getUrlByShortCode(shortCode);
+                            while (existingUrl) {
+                                shortCode = generateShortCode();
+                                existingUrl = await getUrlByShortCode(shortCode);
+                            }
+
+                            // Generate QR Code
+                            const qrCodeDataURL = await qrcode.toDataURL(`${process.env.BASE_URL}/${shortCode}`);
+
+                            // Create URL object
+                            const newUrl = new Url(
+                                pendingPayment.originalUrl,
+                                pendingPayment.customAlias,
+                                pendingPayment.expiryDate,
+                                shortCode,
+                                qrCodeDataURL
+                            );
+
+                            // Create the premium URL
+                            await createUrl(newUrl);
+                            const shortUrl = `${process.env.BASE_URL}/${shortCode}`;
+
+                            // Update pending payment status to completed
+                            await updatePendingPaymentStatus(sessionId, 'completed', shortUrl);
+
+                            console.log(`Premium URL created successfully for payment ${paymentId}: ${shortUrl}`);
+                        } catch (urlCreationError) {
+                            console.error(`Failed to create URL for payment ${paymentId}:`, urlCreationError);
+
+                            // Update status to failed
+                            await updatePendingPaymentStatus(sessionId, 'failed');
+                        }
+                    } else if (pendingPayment) {
+                        console.log(`Pending payment ${sessionId} already processed with status: ${pendingPayment.status}`);
+                    } else {
+                        console.warn(`No pending payment found for sessionId: ${sessionId}`);
+                    }
+                } else {
+                    console.warn(`Payment ${paymentId} approved but no external_reference (sessionId) found`);
+                }
+            }
+
+            console.log(`Payment ${paymentId} processing completed`);
         }
 
         // Always respond with 200 to acknowledge receipt
@@ -242,6 +369,129 @@ app.get('/payment/:id/verify', async (req, res) => {
     } catch (error) {
         console.error('Payment verification error:', error);
         res.status(500).json({ error: 'Failed to verify payment' });
+    }
+});
+
+// Payment return endpoints (called by MercadoPago back_urls)
+app.get('/return/:status', async (req, res) => {
+    try {
+        const { status } = req.params;
+        const { session_id: sessionId, payment_id, merchant_order_id } = req.query;
+
+        if (!sessionId) {
+            return res.redirect(`${process.env.MP_RETURN_URL}/@/error?error=missing_session`);
+        }
+
+        await connectToDatabase();
+
+        let redirectUrl = `${process.env.MP_RETURN_URL}/@/${status}?session_id=${sessionId}`;
+
+        if (status === 'success' && payment_id) {
+            try {
+                // Get payment details from MercadoPago API to confirm
+                const mpPayment = new MPPayment(mercadoPagoConfig);
+                const paymentDetails = await mpPayment.get({ id: payment_id });
+
+                if (paymentDetails.status === 'approved') {
+                    // Try to process the premium URL creation immediately
+                    const pendingPayment = await getPendingPaymentBySessionId(sessionId);
+
+                    if (pendingPayment && pendingPayment.status === 'pending') {
+                        // Update status to processing
+                        await updatePendingPaymentStatus(sessionId, 'processing');
+
+                        // Generate short code for URL
+                        let shortCode = pendingPayment.customAlias || generateShortCode();
+
+                        // Check if shortCode already exists
+                        let existingUrl = await getUrlByShortCode(shortCode);
+                        while (existingUrl) {
+                            shortCode = generateShortCode();
+                            existingUrl = await getUrlByShortCode(shortCode);
+                        }
+
+                        // Generate QR Code
+                        const qrCodeDataURL = await qrcode.toDataURL(`${process.env.BASE_URL}/${shortCode}`);
+
+                        // Create URL object
+                        const newUrl = new Url(
+                            pendingPayment.originalUrl,
+                            pendingPayment.customAlias,
+                            pendingPayment.expiryDate,
+                            shortCode,
+                            qrCodeDataURL
+                        );
+
+                        // Create the premium URL
+                        await createUrl(newUrl);
+                        const shortUrl = `${process.env.BASE_URL}/${shortCode}`;
+
+                        // Update pending payment status to completed
+                        await updatePendingPaymentStatus(sessionId, 'completed', shortUrl);
+
+                        // Redirect with success data
+                        redirectUrl = `${process.env.MP_RETURN_URL}/@/success?session_id=${sessionId}&short_url=${encodeURIComponent(shortUrl)}&payment_id=${payment_id}`;
+
+                        console.log(`Premium URL created immediately for payment ${payment_id}: ${shortUrl}`);
+                    } else if (pendingPayment && pendingPayment.status === 'completed') {
+                        // Already processed, redirect with existing data
+                        redirectUrl = `${process.env.MP_RETURN_URL}/@/success?session_id=${sessionId}&short_url=${encodeURIComponent(pendingPayment.shortUrl)}&payment_id=${payment_id}`;
+                    }
+                }
+            } catch (processingError) {
+                console.error('Error processing premium URL immediately:', processingError);
+                // Still redirect to success, webhook will handle it
+                redirectUrl = `${process.env.MP_RETURN_URL}/@/success?session_id=${sessionId}&payment_id=${payment_id}&processing=true`;
+            }
+        } else if (payment_id) {
+            // Add payment_id to other status redirects
+            redirectUrl += `&payment_id=${payment_id}`;
+        }
+
+        if (merchant_order_id) {
+            redirectUrl += `&merchant_order_id=${merchant_order_id}`;
+        }
+
+        res.redirect(redirectUrl);
+    } catch (error) {
+        console.error('Return endpoint error:', error);
+        res.redirect(`${process.env.MP_RETURN_URL}/@/error?error=processing_failed`);
+    }
+});
+
+// Fallback endpoint - only for cases where direct redirect fails
+app.get('/urls/check-status/:sessionId', async (req, res) => {
+    try {
+        const { sessionId } = req.params;
+
+        if (!sessionId) {
+            return res.status(400).json({ error: 'Session ID is required' });
+        }
+
+        await connectToDatabase();
+
+        // Get pending payment data
+        const pendingPayment = await getPendingPaymentBySessionId(sessionId);
+
+        if (!pendingPayment) {
+            return res.status(404).json({ error: 'Session not found' });
+        }
+
+        const response = {
+            status: pendingPayment.status,
+            sessionId: sessionId
+        };
+
+        // If completed, include the URL and QR code data
+        if (pendingPayment.status === 'completed' && pendingPayment.shortUrl) {
+            response.shortUrl = pendingPayment.shortUrl;
+            response.qrCode = await qrcode.toDataURL(pendingPayment.shortUrl);
+        }
+
+        res.json(response);
+    } catch (error) {
+        console.error('Status check error:', error);
+        res.status(500).json({ error: 'Failed to check status' });
     }
 });
 
