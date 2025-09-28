@@ -5,6 +5,7 @@ require('dotenv').config();
 let db = null;
 let urlsCollection = null;
 let paymentsCollection = null;
+let pendingPaymentsCollection = null;
 
 // Connect to database
 const connectToDatabase = async () => {
@@ -39,10 +40,11 @@ const connectToDatabase = async () => {
       db = admin.firestore();
       urlsCollection = db.collection('urls');
       paymentsCollection = db.collection('payments');
+      pendingPaymentsCollection = db.collection('pending_payments');
     }
 
     console.log('Firebase connection successful!');
-    return { urlsCollection, paymentsCollection };
+    return { urlsCollection, paymentsCollection, pendingPaymentsCollection };
   } catch (error) {
     console.error('Firebase connection error:', error);
     throw error;
@@ -187,6 +189,66 @@ const deleteExpiredUrls = async () => {
   return deletedCount;
 };
 
+// Pending Payments operations
+const createPendingPayment = async (pendingPaymentData) => {
+  const docRef = pendingPaymentsCollection.doc();
+
+  await docRef.set({
+    ...pendingPaymentData,
+    id: docRef.id,
+    status: 'pending',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  });
+  return { id: docRef.id, ...pendingPaymentData };
+};
+
+const getPendingPaymentBySessionId = async (sessionId) => {
+  const q = pendingPaymentsCollection.where('sessionId', '==', sessionId);
+  const querySnapshot = await q.get();
+
+  if (querySnapshot.empty) {
+    return null;
+  }
+
+  const doc = querySnapshot.docs[0];
+  return { id: doc.id, ...doc.data() };
+};
+
+const getPendingPaymentByPreferenceId = async (preferenceId) => {
+  const q = pendingPaymentsCollection.where('preferenceId', '==', preferenceId);
+  const querySnapshot = await q.get();
+
+  if (querySnapshot.empty) {
+    return null;
+  }
+
+  const doc = querySnapshot.docs[0];
+  return { id: doc.id, ...doc.data() };
+};
+
+const updatePendingPaymentStatus = async (sessionId, status, shortUrl = null) => {
+  const q = pendingPaymentsCollection.where('sessionId', '==', sessionId);
+  const querySnapshot = await q.get();
+
+  if (querySnapshot.empty) {
+    throw new Error(`Pending payment with sessionId ${sessionId} not found`);
+  }
+
+  const doc = querySnapshot.docs[0];
+  const updateData = {
+    status: status,
+    updatedAt: new Date().toISOString()
+  };
+
+  if (shortUrl) {
+    updateData.shortUrl = shortUrl;
+  }
+
+  await doc.ref.update(updateData);
+  return { id: doc.id, ...doc.data(), ...updateData };
+};
+
 // Get current user ID (not applicable with Admin SDK)
 const getCurrentUserId = () => {
   return 'anonymous';
@@ -202,6 +264,10 @@ module.exports = {
   getPaymentById,
   getPaymentByIdPayment,
   updatePaymentStatus,
+  createPendingPayment,
+  getPendingPaymentBySessionId,
+  getPendingPaymentByPreferenceId,
+  updatePendingPaymentStatus,
   getCurrentUserId,
   deleteExpiredUrls
 }; 
