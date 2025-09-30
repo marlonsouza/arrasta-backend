@@ -168,13 +168,13 @@ app.post('/prefer', async (req, res) => {
                 }
             ],
             back_urls: {
-                success: `${process.env.BASE_URL}/.netlify/functions/success?session_id=${sessionId}`,
-                pending: `${process.env.BASE_URL}/.netlify/functions/pending?session_id=${sessionId}`,
-                failure: `${process.env.BASE_URL}/.netlify/functions/failure?session_id=${sessionId}`
+                success: `${process.env.BASE_URL}/success?session_id=${sessionId}`,
+                pending: `${process.env.BASE_URL}/pending?session_id=${sessionId}`,
+                failure: `${process.env.BASE_URL}/failure?session_id=${sessionId}`
             },
             auto_return: 'approved',
             external_reference: sessionId,
-            notification_url: `${process.env.BASE_URL}/.netlify/functions/webhook`
+            notification_url: `${process.env.BASE_URL}/webhook`
         };
 
         const preferente = new Preference(mercadoPagoConfig);
