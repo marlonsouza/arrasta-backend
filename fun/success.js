@@ -31,22 +31,14 @@ const handleSuccess = async (req, res) => {
                 // Check if payment was already processed by webhook
                 const pendingPayment = await getPendingPaymentBySessionId(sessionId);
 
-                console.log(`=== SUCCESS ENDPOINT DEBUG ===`);
-                console.log(`Session ID: ${sessionId}`);
-                console.log(`Payment ID: ${payment_id}`);
-                console.log(`Pending Payment:`, pendingPayment);
-
                 if (pendingPayment && pendingPayment.status === 'completed' && pendingPayment.shortUrl) {
                     // Already processed by webhook, redirect with existing data
-                    console.log(`Payment ${payment_id} already processed by webhook`);
                     redirectUrl = `${process.env.MP_RETURN_URL}/@/success?session_id=${sessionId}&short_url=${encodeURIComponent(pendingPayment.shortUrl)}&payment_id=${payment_id}`;
                 } else if (pendingPayment && pendingPayment.status === 'pending') {
                     // Payment exists but not processed yet - let webhook handle it
-                    console.log(`Payment ${payment_id} exists but pending. Webhook should process it.`);
                     redirectUrl = `${process.env.MP_RETURN_URL}/@/success?session_id=${sessionId}&payment_id=${payment_id}&processing=true`;
                 } else {
                     // No pending payment found or unexpected status
-                    console.log(`No pending payment found for session ${sessionId} or unexpected status: ${pendingPayment?.status || 'not found'}`);
                     redirectUrl = `${process.env.MP_RETURN_URL}/@/success?session_id=${sessionId}&payment_id=${payment_id}&processing=true`;
                 }
             } catch (processingError) {
@@ -65,7 +57,6 @@ const handleSuccess = async (req, res) => {
             redirectUrl += `&merchant_order_id=${merchant_order_id}`;
         }
 
-        console.log(`Redirecting to: ${redirectUrl}`);
         res.redirect(redirectUrl);
     } catch (error) {
         console.error('Success endpoint error:', error);

@@ -64,7 +64,11 @@ const validateSignature = (xSignature, payload) => {
     // Validate timestamp (prevent replay attacks - 5 minutes window)
     const currentTimestamp = Math.floor(Date.now() / 1000);
     const webhookTimestamp = parseInt(timestamp);
-    const timeDifference = Math.abs(currentTimestamp - webhookTimestamp);
+
+    // MercadoPago webhook timestamp is always in milliseconds, convert to seconds
+    const adjustedWebhookTimestamp = Math.floor(webhookTimestamp / 1000);
+
+    const timeDifference = Math.abs(currentTimestamp - adjustedWebhookTimestamp);
 
     if (timeDifference > 300) { // 5 minutes
       console.error(`Webhook timestamp too old: ${timeDifference} seconds difference`);
@@ -100,10 +104,6 @@ const validateSignature = (xSignature, payload) => {
 // Webhook endpoint for MercadoPago notifications
 app.post('/webhook', async (req, res) => {
     try {
-        console.log('=== WEBHOOK CALLED ===');
-        console.log('Headers:', req.headers);
-        console.log('Payload:', JSON.stringify(req.body, null, 2));
-
         const xSignature = req.headers['x-signature'];
         const payload = req.body;
 
