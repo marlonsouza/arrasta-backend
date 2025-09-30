@@ -98,8 +98,12 @@ const validateSignature = (xSignature, payload) => {
 };
 
 // Webhook endpoint for MercadoPago notifications
-app.post('/', async (req, res) => {
+app.post('/webhook', async (req, res) => {
     try {
+        console.log('=== WEBHOOK CALLED ===');
+        console.log('Headers:', req.headers);
+        console.log('Payload:', JSON.stringify(req.body, null, 2));
+
         const xSignature = req.headers['x-signature'];
         const payload = req.body;
 
