@@ -10,8 +10,8 @@ app.use(cors());
 // Configure Express to trust the proxy
 app.set('trust proxy', 1);
 
-// Handle failure return from MercadoPago
-app.get('/', async (req, res) => {
+// Main failure handler function
+const handleFailure = async (req, res) => {
     try {
         const { session_id: sessionId, payment_id, merchant_order_id } = req.query;
 
@@ -37,6 +37,9 @@ app.get('/', async (req, res) => {
         console.error('Failure endpoint error:', error);
         res.redirect(`${process.env.MP_RETURN_URL}/@/error?error=processing_failed`);
     }
-});
+};
+
+// Also handle /failure path for explicit calls
+app.get('/failure', handleFailure);
 
 exports.handler = serverless(app);
