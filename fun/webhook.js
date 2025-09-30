@@ -62,16 +62,13 @@ const validateSignature = (xSignature, payload) => {
     }
 
     // Validate timestamp (prevent replay attacks - 5 minutes window)
-    const currentTimestamp = Math.floor(Date.now() / 1000);
+    const currentTimestamp = Date.now(); // Keep in milliseconds
     const webhookTimestamp = parseInt(timestamp);
 
-    // MercadoPago webhook timestamp is always in milliseconds, convert to seconds
-    const adjustedWebhookTimestamp = Math.floor(webhookTimestamp / 1000);
+    const timeDifference = Math.abs(currentTimestamp - webhookTimestamp);
 
-    const timeDifference = Math.abs(currentTimestamp - adjustedWebhookTimestamp);
-
-    if (timeDifference > 300) { // 5 minutes
-      console.error(`Webhook timestamp too old: ${timeDifference} seconds difference`);
+    if (timeDifference > 300000) { // 5 minutes in milliseconds
+      console.error(`Webhook timestamp too old: ${Math.floor(timeDifference / 1000)} seconds difference`);
       return false;
     }
 
