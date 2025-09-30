@@ -26,8 +26,8 @@ app.set('trust proxy', 1);
 
 const mercadoPagoConfig = new MercadoPagoConfig({ accessToken: process.env.MP_ACCESS_TOKEN, options: { timeout: 5000 } });
 
-// Handle success return from MercadoPago
-app.get('/', async (req, res) => {
+// Main success handler function
+const handleSuccess = async (req, res) => {
     try {
         const { session_id: sessionId, payment_id, merchant_order_id, collection_id, collection_status, external_reference } = req.query;
 
@@ -122,6 +122,9 @@ app.get('/', async (req, res) => {
         console.error('Success endpoint error:', error);
         res.redirect(`${process.env.MP_RETURN_URL}/@/error?error=processing_failed`);
     }
-});
+};
+
+// Also handle /success path for explicit calls
+app.get('/success', handleSuccess);
 
 exports.handler = serverless(app);
