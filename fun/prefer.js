@@ -168,9 +168,9 @@ app.post('/prefer', async (req, res) => {
                 }
             ],
             back_urls: {
-                success: `${process.env.BASE_URL}/.netlify/functions/return/success?session_id=${sessionId}`,
-                pending: `${process.env.BASE_URL}/.netlify/functions/return/pending?session_id=${sessionId}`,
-                failure: `${process.env.BASE_URL}/.netlify/functions/return/failure?session_id=${sessionId}`
+                success: `${process.env.BASE_URL}/.netlify/functions/success?session_id=${sessionId}`,
+                pending: `${process.env.BASE_URL}/.netlify/functions/pending?session_id=${sessionId}`,
+                failure: `${process.env.BASE_URL}/.netlify/functions/failure?session_id=${sessionId}`
             },
             auto_return: 'approved',
             external_reference: sessionId,

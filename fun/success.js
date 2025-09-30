@@ -26,13 +26,12 @@ app.set('trust proxy', 1);
 
 const mercadoPagoConfig = new MercadoPagoConfig({ accessToken: process.env.MP_ACCESS_TOKEN, options: { timeout: 5000 } });
 
-// Handle return status endpoints
-// This function handles: /.netlify/functions/return/success, pending, failure
-app.get('/:status', async (req, res) => {
+// Handle success return from MercadoPago
+app.get('/', async (req, res) => {
     try {
-        const { status } = req.params;
+        const { session_id: sessionId, payment_id, merchant_order_id, collection_id, collection_status, external_reference } = req.query;
 
-        const { session_id: sessionId, payment_id, merchant_order_id } = req.query;
+        console.log('Success endpoint called with:', req.query);
 
         if (!sessionId) {
             return res.redirect(`${process.env.MP_RETURN_URL}/@/error?error=missing_session`);
@@ -40,19 +39,23 @@ app.get('/:status', async (req, res) => {
 
         await connectToDatabase();
 
-        let redirectUrl = `${process.env.MP_RETURN_URL}/@/${status}?session_id=${sessionId}`;
+        let redirectUrl = `${process.env.MP_RETURN_URL}/@/success?session_id=${sessionId}`;
 
-        if (status === 'success' && payment_id) {
+        if (payment_id) {
             try {
                 // Get payment details from MercadoPago API to confirm
                 const mpPayment = new MPPayment(mercadoPagoConfig);
                 const paymentDetails = await mpPayment.get({ id: payment_id });
+
+                console.log(`Payment ${payment_id} status: ${paymentDetails.status}`);
 
                 if (paymentDetails.status === 'approved') {
                     // Try to process the premium URL creation immediately
                     const pendingPayment = await getPendingPaymentBySessionId(sessionId);
 
                     if (pendingPayment && pendingPayment.status === 'pending') {
+                        console.log(`Processing pending payment for session ${sessionId}`);
+
                         // Update status to processing
                         await updatePendingPaymentStatus(sessionId, 'processing');
 
@@ -91,7 +94,10 @@ app.get('/:status', async (req, res) => {
                         console.log(`Premium URL created immediately for payment ${payment_id}: ${shortUrl}`);
                     } else if (pendingPayment && pendingPayment.status === 'completed') {
                         // Already processed, redirect with existing data
+                        console.log(`Payment ${payment_id} already processed`);
                         redirectUrl = `${process.env.MP_RETURN_URL}/@/success?session_id=${sessionId}&short_url=${encodeURIComponent(pendingPayment.shortUrl)}&payment_id=${payment_id}`;
+                    } else {
+                        console.log(`No pending payment found for session ${sessionId} or wrong status: ${pendingPayment?.status}`);
                     }
                 }
             } catch (processingError) {
@@ -99,18 +105,21 @@ app.get('/:status', async (req, res) => {
                 // Still redirect to success, webhook will handle it
                 redirectUrl = `${process.env.MP_RETURN_URL}/@/success?session_id=${sessionId}&payment_id=${payment_id}&processing=true`;
             }
-        } else if (payment_id) {
-            // Add payment_id to other status redirects
-            redirectUrl += `&payment_id=${payment_id}`;
+
+            // Add payment_id to redirect URL if not already added
+            if (!redirectUrl.includes('payment_id=')) {
+                redirectUrl += `&payment_id=${payment_id}`;
+            }
         }
 
-        if (merchant_order_id) {
+        if (merchant_order_id && !redirectUrl.includes('merchant_order_id=')) {
             redirectUrl += `&merchant_order_id=${merchant_order_id}`;
         }
 
+        console.log(`Redirecting to: ${redirectUrl}`);
         res.redirect(redirectUrl);
     } catch (error) {
-        console.error('Return endpoint error:', error);
+        console.error('Success endpoint error:', error);
         res.redirect(`${process.env.MP_RETURN_URL}/@/error?error=processing_failed`);
     }
 });
