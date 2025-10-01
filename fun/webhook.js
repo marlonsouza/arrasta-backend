@@ -75,9 +75,14 @@ const validateSignature = (xSignature, payload) => {
       return false;
     }
 
-    // Validate timestamp (prevent replay attacks - 5 minutes window)
+    // Validate timestamp (prevent replay attacks - 30 minutes window)
+    // MercadoPago can retry webhooks with the original timestamp
     const currentTimestamp = Date.now(); // in milliseconds
     const webhookTimestamp = parseInt(timestamp) * 1000; // Convert from seconds to milliseconds
+
+    const timeDifference = Math.abs(currentTimestamp - webhookTimestamp);
+    const timeDifferenceInSeconds = Math.floor(timeDifference / 1000);
+    const timeDifferenceInMinutes = Math.floor(timeDifferenceInSeconds / 60);
 
     console.log('DEBUG TIMESTAMP:', {
       current: currentTimestamp,
@@ -85,17 +90,19 @@ const validateSignature = (xSignature, payload) => {
       webhook: webhookTimestamp,
       webhookDate: new Date(webhookTimestamp).toISOString(),
       timestampString: timestamp,
-      timestampOriginal: parseInt(timestamp)
+      differenceSeconds: timeDifferenceInSeconds,
+      differenceMinutes: timeDifferenceInMinutes
     });
 
-    const timeDifference = Math.abs(currentTimestamp - webhookTimestamp);
-
-    if (timeDifference > 300000) { // 5 minutes in milliseconds
-      console.error(`Webhook timestamp too old: ${Math.floor(timeDifference / 1000)} seconds difference`);
+    // Allow 30 minutes window (MercadoPago can retry with old timestamp)
+    if (timeDifference > 1800000) { // 30 minutes in milliseconds
+      console.error(`Webhook timestamp too old: ${timeDifferenceInMinutes} minutes (${timeDifferenceInSeconds} seconds) difference`);
       console.error('Current timestamp:', currentTimestamp, new Date(currentTimestamp).toISOString());
       console.error('Webhook timestamp:', webhookTimestamp, new Date(webhookTimestamp).toISOString());
       return false;
     }
+
+    console.log(`Webhook timestamp valid: ${timeDifferenceInMinutes} minutes old`);
 
     // Create the string to sign: id + request_url + timestamp
     const dataId = payload.data?.id || '';
