@@ -1,7 +1,7 @@
 class Payment {
-    constructor(idUrl, idPayment, quantity){
-        this.idUrl = idUrl;
-        this.idPayment = idPayment;
+    constructor(sessionId, preferenceId, quantity){
+        this.sessionId = sessionId;
+        this.preferenceId = preferenceId;
         this.status = null;
         this.idMerchantOrder = null;
         this.quantity = quantity;

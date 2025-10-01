@@ -76,15 +76,16 @@ const validateSignature = (xSignature, payload) => {
     }
 
     // Validate timestamp (prevent replay attacks - 5 minutes window)
-    const currentTimestamp = Date.now(); // Keep in milliseconds
-    const webhookTimestamp = parseInt(timestamp);
+    const currentTimestamp = Date.now(); // in milliseconds
+    const webhookTimestamp = parseInt(timestamp) * 1000; // Convert from seconds to milliseconds
 
     console.log('DEBUG TIMESTAMP:', {
       current: currentTimestamp,
       currentDate: new Date(currentTimestamp).toISOString(),
       webhook: webhookTimestamp,
       webhookDate: new Date(webhookTimestamp).toISOString(),
-      timestampString: timestamp
+      timestampString: timestamp,
+      timestampOriginal: parseInt(timestamp)
     });
 
     const timeDifference = Math.abs(currentTimestamp - webhookTimestamp);
