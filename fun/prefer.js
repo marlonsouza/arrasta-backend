@@ -34,22 +34,24 @@ app.use(cors());
 // Configure Express to trust the proxy
 app.set('trust proxy', 1);
 
-// Create a limiter that allows 10 requests per 15 minutes
+// Create a limiter that allows 5 requests per 5 minutes (more restrictive)
 const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 10, // limit each IP to 10 requests per windowMs
-  message: { error: 'Too many requests, please try again later.' },
+  windowMs: 5 * 60 * 1000, // 5 minutes
+  max: 5, // limit each IP to 5 requests per windowMs
+  message: { error: 'Too many payment requests, please wait a few minutes before trying again.' },
   standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
   legacyHeaders: false, // Disable the `X-RateLimit-*` headers
   // Use a custom key generator that doesn't rely on IP
   keyGenerator: (req) => {
     // Use a combination of headers that might identify the user
     // This is a fallback when IP is not available
-    return req.headers['x-forwarded-for'] || 
-           req.headers['x-real-ip'] || 
-           req.headers['cf-connecting-ip'] || 
+    return req.headers['x-forwarded-for'] ||
+           req.headers['x-real-ip'] ||
+           req.headers['cf-connecting-ip'] ||
            'unknown';
-  }
+  },
+  // Skip successful requests from counting (only count errors/retries)
+  skipSuccessfulRequests: false
 });
 
 // Apply rate limiting to all routes
@@ -84,6 +86,16 @@ app.post('/prefer', async (req, res) => {
         }
 
         await connectToDatabase();
+
+        // Check if customAlias is already being processed (prevent duplicates)
+        if (customAlias) {
+            const existingUrl = await getUrlByShortCode(customAlias);
+            if (existingUrl) {
+                return res.status(409).json({
+                    error: 'Custom alias already exists or is being processed'
+                });
+            }
+        }
 
         // Generate unique session ID
         const sessionId = generateSessionId();

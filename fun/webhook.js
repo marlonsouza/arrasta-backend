@@ -27,6 +27,20 @@ app.set('trust proxy', 1);
 
 const mercadoPagoConfig = new MercadoPagoConfig({ accessToken: process.env.MP_ACCESS_TOKEN, options: { timeout: 5000 } });
 
+// In-memory cache to prevent duplicate webhook processing
+const processedWebhooks = new Map();
+const WEBHOOK_CACHE_TTL = 10 * 60 * 1000; // 10 minutes
+
+// Clean up old entries periodically
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, timestamp] of processedWebhooks.entries()) {
+    if (now - timestamp > WEBHOOK_CACHE_TTL) {
+      processedWebhooks.delete(key);
+    }
+  }
+}, 60 * 1000); // Clean every minute
+
 // Function to validate MercadoPago webhook signature
 const validateSignature = (xSignature, payload) => {
   try {
@@ -65,10 +79,20 @@ const validateSignature = (xSignature, payload) => {
     const currentTimestamp = Date.now(); // Keep in milliseconds
     const webhookTimestamp = parseInt(timestamp);
 
+    console.log('DEBUG TIMESTAMP:', {
+      current: currentTimestamp,
+      currentDate: new Date(currentTimestamp).toISOString(),
+      webhook: webhookTimestamp,
+      webhookDate: new Date(webhookTimestamp).toISOString(),
+      timestampString: timestamp
+    });
+
     const timeDifference = Math.abs(currentTimestamp - webhookTimestamp);
 
     if (timeDifference > 300000) { // 5 minutes in milliseconds
       console.error(`Webhook timestamp too old: ${Math.floor(timeDifference / 1000)} seconds difference`);
+      console.error('Current timestamp:', currentTimestamp, new Date(currentTimestamp).toISOString());
+      console.error('Webhook timestamp:', webhookTimestamp, new Date(webhookTimestamp).toISOString());
       return false;
     }
 
@@ -117,6 +141,16 @@ app.post('/webhook', async (req, res) => {
             await connectToDatabase();
 
             const paymentId = payload.data.id;
+            const webhookKey = `payment_${paymentId}`;
+
+            // Check if this webhook was already processed (idempotency)
+            if (processedWebhooks.has(webhookKey)) {
+                console.log(`Webhook for payment ${paymentId} already processed, skipping duplicate`);
+                return res.status(200).json({ success: true, message: 'Already processed' });
+            }
+
+            // Mark this webhook as being processed
+            processedWebhooks.set(webhookKey, Date.now());
 
             // Get payment details from MercadoPago API
             const mpPayment = new MPPayment(mercadoPagoConfig);
