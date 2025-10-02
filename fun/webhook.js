@@ -58,7 +58,7 @@ const validateSignature = (xSignature, xRequestId, queryParams, payload) => {
     let timestamp, signature;
 
     for (const part of parts) {
-      const [key, value] = part.split('=', 2);
+      const [key, value] = part.split('=');
       if (key && value) {
         const trimmedKey = key.trim();
         const trimmedValue = value.trim();
