@@ -104,9 +104,18 @@ const validateSignature = (xSignature, payload) => {
 
     console.log(`Webhook timestamp valid: ${timeDifferenceInMinutes} minutes old`);
 
-    // Create the string to sign: id + request_url + timestamp
+    // Create the string to sign: id + timestamp
     const dataId = payload.data?.id || '';
     const dataToSign = `${dataId}${timestamp}`;
+
+    console.log('DEBUG SIGNATURE:', {
+      payloadType: payload.type,
+      payloadData: payload.data,
+      dataId: dataId,
+      timestamp: timestamp,
+      dataToSign: dataToSign,
+      secretConfigured: !!process.env.MP_WEBHOOK_SECRET
+    });
 
     // Create HMAC with webhook secret
     const expectedSignature = crypto
@@ -121,6 +130,7 @@ const validateSignature = (xSignature, payload) => {
       console.error('Expected:', expectedSignature);
       console.error('Received:', signature);
       console.error('Data signed:', dataToSign);
+      console.error('Full payload:', JSON.stringify(payload, null, 2));
     }
 
     return isValid;
