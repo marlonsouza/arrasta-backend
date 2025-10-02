@@ -105,12 +105,15 @@ const validateSignature = (xSignature, payload) => {
     }
 
     // Create the string to sign: id + timestamp
-    const dataId = payload.data?.id || '';
+    // MercadoPago sends the ID in different formats depending on webhook version
+    const dataId = payload.data?.id || payload.resource || payload.id || '';
     const dataToSign = `${dataId}${timestamp}`;
 
     console.log('DEBUG SIGNATURE:', {
       payloadType: payload.type,
+      payloadTopic: payload.topic,
       payloadData: payload.data,
+      payloadResource: payload.resource,
       dataId: dataId,
       timestamp: timestamp,
       dataToSign: dataToSign,
@@ -155,10 +158,18 @@ app.post('/webhook', async (req, res) => {
         }
 
         // Handle payment notifications
-        if (payload.type === 'payment') {
+        // Support both old format (type: 'payment') and new format (topic: 'payment')
+        if (payload.type === 'payment' || payload.topic === 'payment') {
             await connectToDatabase();
 
-            const paymentId = payload.data.id;
+            // Extract payment ID from different webhook formats
+            const paymentId = payload.data?.id || payload.resource || payload.id;
+
+            if (!paymentId) {
+                console.error('No payment ID found in webhook payload:', JSON.stringify(payload));
+                return res.status(400).json({ error: 'Missing payment ID' });
+            }
+
             const webhookKey = `payment_${paymentId}`;
 
             // Check if this webhook was already processed (idempotency)
