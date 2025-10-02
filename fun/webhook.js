@@ -94,15 +94,15 @@ const validateSignature = (xSignature, payload) => {
       differenceMinutes: timeDifferenceInMinutes
     });
 
-    // Allow 30 minutes window (MercadoPago can retry with old timestamp)
+    // Log warning for old timestamps but don't block (MercadoPago retries with old timestamps)
+    // The idempotency cache will prevent duplicate processing
     if (timeDifference > 1800000) { // 30 minutes in milliseconds
-      console.error(`Webhook timestamp too old: ${timeDifferenceInMinutes} minutes (${timeDifferenceInSeconds} seconds) difference`);
-      console.error('Current timestamp:', currentTimestamp, new Date(currentTimestamp).toISOString());
-      console.error('Webhook timestamp:', webhookTimestamp, new Date(webhookTimestamp).toISOString());
-      return false;
+      console.warn(`⚠️ Webhook timestamp is ${timeDifferenceInMinutes} minutes old (${timeDifferenceInSeconds} seconds)`);
+      console.warn('Webhook timestamp:', webhookTimestamp, new Date(webhookTimestamp).toISOString());
+      console.warn('This is a retry from MercadoPago - idempotency cache will prevent duplicates');
+    } else {
+      console.log(`✅ Webhook timestamp valid: ${timeDifferenceInMinutes} minutes old`);
     }
-
-    console.log(`Webhook timestamp valid: ${timeDifferenceInMinutes} minutes old`);
 
     // Create the string to sign: id + timestamp
     const dataId = payload.data?.id || '';
