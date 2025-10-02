@@ -106,59 +106,41 @@ const validateSignature = (xSignature, xRequestId, queryParams, payload) => {
 
     // Build the signature template according to MercadoPago documentation:
     // Template: id:[data.id];request-id:[x-request-id];ts:[ts];
+    // Reference: https://www.mercadopago.com.br/developers/pt/docs/your-integrations/notifications/webhooks
 
-    // Extract data.id from query params (if available) or payload
-    const dataId = queryParams?.['data.id'] ||
-                   queryParams?.id ||
-                   payload.data?.id ||
-                   (payload.resource && typeof payload.resource === 'string' && payload.resource.includes('http')
-                     ? payload.resource.split('/').pop()
-                     : payload.resource) || '';
+    // Extract data.id from query params exactly as in the official example
+    const dataID = queryParams?.['data.id'] || queryParams?.id || '';
 
-    // Convert data.id to lowercase if alphanumeric (per documentation)
-    const dataIdLower = typeof dataId === 'string' ? dataId.toLowerCase() : dataId;
-
-    // Build the manifest template
-    let manifestParts = [];
-
-    if (dataId) {
-      manifestParts.push(`id:${dataIdLower}`);
-    }
-
-    if (xRequestId) {
-      manifestParts.push(`request-id:${xRequestId}`);
-    }
-
-    if (timestamp) {
-      manifestParts.push(`ts:${timestamp}`);
-    }
-
-    const manifest = manifestParts.join(';') + ';';
+    // Generate the manifest string (exactly as in MP documentation)
+    const manifest = `id:${dataID};request-id:${xRequestId};ts:${timestamp};`;
 
     console.log('DEBUG SIGNATURE:', {
       payloadType: payload.type,
       payloadTopic: payload.topic,
       xRequestId: xRequestId,
       queryParams: queryParams,
-      dataIdExtracted: dataId,
-      dataIdLower: dataIdLower,
+      dataID: dataID,
       timestamp: timestamp,
       manifest: manifest,
-      secretConfigured: !!process.env.MP_WEBHOOK_SECRET
+      manifestLength: manifest.length,
+      secretConfigured: !!process.env.MP_WEBHOOK_SECRET,
+      secretLength: process.env.MP_WEBHOOK_SECRET?.length
     });
 
-    // Create HMAC with webhook secret
-    const expectedSignature = crypto
-      .createHmac('sha256', process.env.MP_WEBHOOK_SECRET)
-      .update(manifest)
-      .digest('hex');
+    // Create an HMAC signature (exactly as in MP documentation example)
+    const hmac = crypto.createHmac('sha256', process.env.MP_WEBHOOK_SECRET);
+    hmac.update(manifest);
+    const sha = hmac.digest('hex');
 
-    const isValid = signature === expectedSignature;
+    // Compare with the hash from x-signature header
+    const isValid = sha === signature;
 
-    if (!isValid) {
-      console.error('Signature validation failed');
-      console.error('Expected:', expectedSignature);
-      console.error('Received:', signature);
+    if (isValid) {
+      console.log('✅ HMAC verification passed');
+    } else {
+      console.error('❌ HMAC verification failed');
+      console.error('Expected (sha):', sha);
+      console.error('Received (hash):', signature);
       console.error('Manifest used:', manifest);
       console.error('Full payload:', JSON.stringify(payload, null, 2));
     }
