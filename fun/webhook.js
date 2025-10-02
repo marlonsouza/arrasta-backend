@@ -106,7 +106,14 @@ const validateSignature = (xSignature, payload) => {
 
     // Create the string to sign: id + timestamp
     // MercadoPago sends the ID in different formats depending on webhook version
-    const dataId = payload.data?.id || payload.resource || payload.id || '';
+    let dataId = payload.data?.id || payload.resource || payload.id || '';
+
+    // If resource is a URL, extract just the ID from the end
+    if (typeof dataId === 'string' && dataId.includes('http')) {
+      const urlParts = dataId.split('/');
+      dataId = urlParts[urlParts.length - 1];
+    }
+
     const dataToSign = `${dataId}${timestamp}`;
 
     console.log('DEBUG SIGNATURE:', {
@@ -114,7 +121,7 @@ const validateSignature = (xSignature, payload) => {
       payloadTopic: payload.topic,
       payloadData: payload.data,
       payloadResource: payload.resource,
-      dataId: dataId,
+      dataIdExtracted: dataId,
       timestamp: timestamp,
       dataToSign: dataToSign,
       secretConfigured: !!process.env.MP_WEBHOOK_SECRET
@@ -254,6 +261,11 @@ app.post('/webhook', async (req, res) => {
             }
 
             console.log(`Payment ${paymentId} processing completed`);
+        }
+
+        // Handle merchant_order notifications (can be ignored or logged)
+        if (payload.topic === 'merchant_order') {
+            console.log('Merchant order notification received - ignoring (payment webhook will handle this)');
         }
 
         // Always respond with 200 to acknowledge receipt
