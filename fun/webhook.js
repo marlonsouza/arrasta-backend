@@ -84,16 +84,6 @@ const validateSignature = (xSignature, xRequestId, queryParams, payload) => {
     const timeDifferenceInSeconds = Math.floor(timeDifference / 1000);
     const timeDifferenceInMinutes = Math.floor(timeDifferenceInSeconds / 60);
 
-    console.log('DEBUG TIMESTAMP:', {
-      current: currentTimestamp,
-      currentDate: new Date(currentTimestamp).toISOString(),
-      webhook: webhookTimestamp,
-      webhookDate: new Date(webhookTimestamp).toISOString(),
-      timestampString: timestamp,
-      differenceSeconds: timeDifferenceInSeconds,
-      differenceMinutes: timeDifferenceInMinutes
-    });
-
     // Log warning for old timestamps but don't block (MercadoPago retries with old timestamps)
     // The idempotency cache will prevent duplicate processing
     if (timeDifference > 1800000) { // 30 minutes in milliseconds
@@ -104,28 +94,11 @@ const validateSignature = (xSignature, xRequestId, queryParams, payload) => {
       console.log(`✅ Webhook timestamp valid: ${timeDifferenceInMinutes} minutes old`);
     }
 
-    // Build the signature template according to MercadoPago documentation:
-    // Template: id:[data.id];request-id:[x-request-id];ts:[ts];
-    // Reference: https://www.mercadopago.com.br/developers/pt/docs/your-integrations/notifications/webhooks
-
     // Extract data.id from query params exactly as in the official example
     const dataID = queryParams?.['data.id'] || queryParams?.id || '';
 
     // Generate the manifest string (exactly as in MP documentation)
     const manifest = `id:${dataID};request-id:${xRequestId};ts:${timestamp};`;
-
-    console.log('DEBUG SIGNATURE:', {
-      payloadType: payload.type,
-      payloadTopic: payload.topic,
-      xRequestId: xRequestId,
-      queryParams: queryParams,
-      dataID: dataID,
-      timestamp: timestamp,
-      manifest: manifest,
-      manifestLength: manifest.length,
-      secretConfigured: !!process.env.MP_WEBHOOK_SECRET,
-      secretLength: process.env.MP_WEBHOOK_SECRET?.length
-    });
 
     // Create an HMAC signature (exactly as in MP documentation example)
     const hmac = crypto.createHmac('sha256', process.env.MP_WEBHOOK_SECRET);
@@ -161,8 +134,6 @@ app.post('/webhook', async (req, res) => {
         const payload = req.body;
 
         console.log(`📩 Webhook received: topic=${payload.topic || payload.type}, resource=${payload.resource || payload.data?.id}`);
-        console.log(`Headers: x-request-id=${xRequestId}, has x-signature=${!!xSignature}`);
-        console.log(`Query params:`, queryParams);
 
         // Validate signature if webhook secret is configured (warning mode)
         if (process.env.MP_WEBHOOK_SECRET && xSignature) {
