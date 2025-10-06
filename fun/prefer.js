@@ -123,6 +123,8 @@ app.post('/prefer', async (req, res) => {
                 failure: process.env.MP_RETURN_URL + '/@/failure'
             },
             auto_return: 'approved',
+            external_reference: sessionId,
+            notification_url: `${process.env.BASE_URL}/.netlify/functions/webhook`
         };
 
         const preferente = new Preference(mercadoPagoConfig);
