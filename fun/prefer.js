@@ -115,7 +115,8 @@ app.post('/prefer', async (req, res) => {
                 failure: `${process.env.BASE_URL}/failure?session_id=${sessionId}`
             },
             auto_return: 'approved',
-            external_reference: sessionId
+            external_reference: sessionId,
+            notification_url: `${process.env.BASE_URL}/.netlify/functions/webhook`
         };
 
         const preferente = new Preference(mercadoPagoConfig);
