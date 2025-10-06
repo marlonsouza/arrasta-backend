@@ -126,7 +126,12 @@ const validateSignature = (xSignature, xRequestId, queryParams, payload) => {
 };
 
 // Webhook endpoint for MercadoPago notifications
-app.post('/webhook', async (req, res) => {
+// Use app.all() to accept all HTTP methods (GET, POST, etc.) for Netlify compatibility
+app.all('/', async (req, res) => {
+    // Only process POST requests for actual webhooks
+    if (req.method !== 'POST') {
+        return res.status(200).json({ status: 'Webhook endpoint is active' });
+    }
     try {
         const xSignature = req.headers['x-signature'];
         const xRequestId = req.headers['x-request-id'];
